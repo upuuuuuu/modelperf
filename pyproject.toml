@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-authors = [{ name = "wangdev88" }]
+authors = [{ name = "upuuuuuu" }]
 keywords = [
     "deep learning",
     "performance analysis",
@@ -56,9 +56,9 @@ oneflow = ["oneflow-onnx"]
 dev = ["build", "twine"]
 
 [project.urls]
-Homepage = "https://github.com/wangdev88/modelperf"
-Repository = "https://github.com/wangdev88/modelperf"
-Issues = "https://github.com/wangdev88/modelperf/issues"
+Homepage = "https://github.com/upuuuuuu/modelperf"
+Repository = "https://github.com/upuuuuuu/modelperf"
+Issues = "https://github.com/upuuuuuu/modelperf/issues"
 
 [tool.setuptools]
 include-package-data = true
