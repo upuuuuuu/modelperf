@@ -1,0 +1,55 @@
+# ── Python ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+pip-wheel-metadata/
+
+# ── 虚拟环境 ─────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── 测试 / 静态检查缓存 ──────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ── IDE / 编辑器 ─────────────────────────────────────
+.vscode/
+.idea/
+.marscode/
+*.swp
+*.swo
+*.orig
+*.rej
+
+# ── OS ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── 日志 ─────────────────────────────────────────────
+*.log
+
+# ── 生成的产物 / 临时文件 ────────────────────────────
+*.csv
+*.png
+*.svg
+*.pkl
+*.pt
+*.onnx
+*.cg
+*.pyg
+graph.html
+
+# ── 本包不含的内置文件 ───────────────────────────────
+modelperf/demo_web.py
+.uploads/

@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modelperf"
+dynamic = ["version"]
+description = "Static performance analyzer for deep learning models: turn any model into a cost-annotated computation graph, without running it."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "wangdev88" }]
+keywords = [
+    "deep learning",
+    "performance analysis",
+    "static analysis",
+    "computation graph",
+    "flops",
+    "roofline",
+    "onnx",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "onnx>=1.14",
+    "onnxsim>=0.4.33",
+    "networkx>=2.8",
+    "numpy>=1.23",
+    "pandas>=1.5",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+torch = ["torch", "torchvision"]
+tensorflow = ["tensorflow", "tf2onnx"]
+tflite = ["tensorflow", "tf2onnx"]
+paddle = ["paddle2onnx"]
+caffe = ["caffe2onnx"]
+mxnet = ["mxnet"]
+chainer = ["onnx-chainer"]
+jax = ["jax2onnx"]
+mindspore = ["mindspore"]
+oneflow = ["oneflow-onnx"]
+dev = ["build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/wangdev88/modelperf"
+Repository = "https://github.com/wangdev88/modelperf"
+Issues = "https://github.com/wangdev88/modelperf/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = { attr = "modelperf.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["modelperf*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+modelperf = ["hardware.yaml"]
+"modelperf.analysis" = ["assets/*.html", "assets/vendor/*.js"]

@@ -1,0 +1,437 @@
+# =====================================================
+#  硬件参数（roofline 代价 / cache 阈值）— 按设备组织
+#
+#  生成 cg / pyg 时传入设备名, 读取对应设备参数
+#  peak_flops 按精度给出, 稠密口径: fp32=CUDA core, fp16/int8=tensor core
+#  按 FP32 accumulate（cuDNN/TensorRT 默认, 可真实达到）; 厂商表的
+#  FP16-acc/稀疏 峰值不采用, Pascal 等无 tensor core 的按硬件实际速率
+#  RIDGE = peak_flops / peak_bytes 派生, 不入 yaml
+#
+#  设备命名与 bench 数据集一致:
+#    seer_v2 / 默认     rtx3090
+#    cmu_v1_fp32        cm4 cm7   (STM32H747XI: Cortex-M4 / Cortex-M7)
+#    cmu_v2_fp32        cm7
+#    cmu_v2_wh32_fp32   cm7       (同上, 输入 32x32)
+#    hwnasbench         edgegpu raspi4 pixel3 eyeriss fpga
+#    latbench           desktop-* embedded-* mobile-*
+#    nasbench101        p100
+#    nnmeter            cortexa76 adreno640 adreno630 myriadvpu
+#    hwgptbench         P100 a100 h100 v100 a40 rtx2080 rtx3080
+#                       a6000 cpu_xeon_* cpu_amd_*
+#
+#  标注「估算」的参数为量级近似, 可按需修正
+# =====================================================
+
+default_device: rtx3090
+default_dtype: fp32
+
+devices:
+  # ── 本组设备 ──────────────────────────────────────
+  rtx3090:
+    peak_flops: {fp32: 35.6e+12, fp16: 71.2e+12, int8: 142.4e+12}  # FP32-acc 稠密 (FP16-acc 142, sparse 284 不采用)
+    peak_bytes: 0.936e+12
+    l2_bytes: 6291456        # 6 MB
+    l1_bytes: 131072         # 128 KB / SM
+
+  rtx3080:                     # hwgptbench 实测为 3080Ti, 按其参数
+    peak_flops: {fp32: 34.1e+12, fp16: 68.3e+12, int8: 136.5e+12}
+    peak_bytes: 0.760e+12
+    l2_bytes: 6291456        # 6 MB (3080 为 5 MB)
+    l1_bytes: 131072         # 128 KB / SM
+
+  # ── 服务器 GPU (hwgptbench / nasbench101) ─────────
+  P100:
+    peak_flops: {fp32: 9.3e+12, fp16: 18.7e+12}    # 原生 fp16 无 tensor core
+    peak_bytes: 0.732e+12
+    l2_bytes: 4194304        # 4 MB
+    l1_bytes: 24576          # 24 KB / SM
+
+  p100:                      # nasbench101 命名, 同 P100
+    peak_flops: {fp32: 9.3e+12, fp16: 18.7e+12}
+    peak_bytes: 0.732e+12
+    l2_bytes: 4194304
+    l1_bytes: 24576
+
+  v100:
+    peak_flops: {fp32: 15.7e+12, fp16: 125.0e+12}  # tensor core 稠密
+    peak_bytes: 0.900e+12
+    l2_bytes: 6291456
+    l1_bytes: 131072
+
+  a100:
+    peak_flops: {fp32: 19.5e+12, fp16: 312.0e+12, int8: 624.0e+12}
+    peak_bytes: 2.039e+12
+    l2_bytes: 41943040       # 40 MB
+    l1_bytes: 196608         # 192 KB / SM
+
+  h100:
+    peak_flops: {fp32: 67.0e+12, fp16: 989.4e+12, int8: 1978.9e+12}
+    peak_bytes: 3.350e+12
+    l2_bytes: 52428800       # 50 MB
+    l1_bytes: 262144         # 256 KB / SM
+
+  a40:
+    peak_flops: {fp32: 37.4e+12, fp16: 74.8e+12, int8: 149.7e+12}  # FP32-acc 稠密 (datasheet 149.7 为 FP16-acc)
+    peak_bytes: 0.696e+12
+    l2_bytes: 6291456
+    l1_bytes: 131072
+
+  rtx2080:                     # hwgptbench 实测为 2080Ti, 按其参数
+    peak_flops: {fp32: 13.4e+12, fp16: 53.8e+12, int8: 107.6e+12}  # FP32-acc 稠密 (FP16-acc 107.6 不采用)
+    peak_bytes: 0.616e+12    # 616 GB/s (2080 为 448)
+    l2_bytes: 5767168        # 5.5 MB (2080 为 4 MB)
+    l1_bytes: 98304          # 96 KB / SM
+
+  a6000:
+    peak_flops: {fp32: 38.7e+12, fp16: 154.8e+12, int8: 309.7e+12}
+    peak_bytes: 0.768e+12
+    l2_bytes: 6291456
+    l1_bytes: 131072
+
+  # ── 桌面 CPU/GPU (latbench) ────────────────────────
+  desktop-cpu-core-i7-7820x:
+    peak_flops: {fp32: 1.84e+12}     # 8c @3.6G AVX2 2xFMA256; AVX-512 理论 3.7 降频不采用
+    peak_bytes: 0.085e+12
+    l2_bytes: 1048576        # 1 MB / 核, 估算
+    l1_bytes: 32768
+
+  desktop-gpu-gtx-1080ti:
+    peak_flops: {fp32: 11.3e+12, fp16: 0.18e+12}   # Pascal fp16 为 1/64 速率
+    peak_bytes: 0.484e+12
+    l2_bytes: 2883584        # 2.75 MB
+    l1_bytes: 98304
+
+  desktop-gpu-gtx-1080ti_large:     # 大 batch 版, 同 1080ti
+    peak_flops: {fp32: 11.3e+12, fp16: 0.18e+12}
+    peak_bytes: 0.484e+12
+    l2_bytes: 2883584
+    l1_bytes: 98304
+
+  # ── 边缘设备 (latbench / hwnasbench) ───────────────
+  embedded-gpu-jetson-nano:
+    peak_flops: {fp32: 0.236e+12, fp16: 0.472e+12}  # 官方 472 GFLOPS FP16 (Maxwell 全速 FP16)
+    peak_bytes: 0.0256e+12
+    l2_bytes: 2097152        # 2 MB (Tegra X1 GM20B)
+    l1_bytes: 65536          # 估算
+
+  embedded-tpu-edge-tpu:            # Coral Edge TPU, 仅 int8
+    peak_flops: {int8: 4.0e+12}
+    peak_bytes: 0.025e+12    # 估算
+    l2_bytes: 4194304        # 估算
+    l1_bytes: 65536          # 估算
+
+  embedded-tpu-edge-tpu_large:      # 大 batch 版, 同 edge-tpu
+    peak_flops: {int8: 4.0e+12}
+    peak_bytes: 0.025e+12
+    l2_bytes: 4194304
+    l1_bytes: 65536
+
+  edgegpu:                          # HW-NAS-Bench: Jetson AGX Xavier
+    peak_flops: {fp32: 1.4e+12, fp16: 11.3e+12, int8: 22.6e+12}   # Xavier 官方 tensor 稠密
+    peak_bytes: 0.137e+12
+    l2_bytes: 524288         # 估算
+    l1_bytes: 131072
+
+
+  raspi4:                           # BCM2711 Cortex-A72 x4
+    peak_flops: {fp32: 0.048e+12}
+    peak_bytes: 0.0128e+12
+    l2_bytes: 1048576        # 估算
+    l1_bytes: 49152
+
+  pixel3:                           # Adreno 630
+    peak_flops: {fp32: 0.5e+12}     # 估算
+    peak_bytes: 0.0299e+12   # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768          # 估算
+
+  eyeriss:                          # MIT Eyeriss 加速器
+    peak_flops: {fp32: 0.067e+12}   # 168 PE @200MHz, 估算
+    peak_bytes: 0.01e+12     # 片上 SRAM, 估算
+    l2_bytes: 185856         # 181.5 KB 全局缓冲
+    l1_bytes: 32768          # 估算
+
+  fpga:                             # HW-NAS-Bench FPGA (ZCU104 类)
+    peak_flops: {int8: 1.5e+12}     # DPU 估算
+    peak_bytes: 0.0192e+12   # DDR4, 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 65536          # 估算
+
+  # ── 边缘 MCU (cmu_v1_fp32 / cmu_v2_fp32 / cmu_v2_wh32_fp32) ──
+  #  STM32H747XI 双核: Cortex-M7 @480MHz (FPv5-D16) / Cortex-M4 @240MHz (FPv4-SP)
+  #  两核共享 AXI SRAM 512KB, 各自独立 DTCM
+  cm7:
+    peak_flops: {fp32: 0.96e+9, fp16: 0.48e+9, int8: 1.92e+9}  # 1 FMA/cycle, int8 按 DSP SIMD 估
+    peak_bytes: 3.84e+9      # 64bit TCM @480MHz, 估算
+    l2_bytes: 524288         # AXI SRAM 512 KB (共享)
+    l1_bytes: 131072         # DTCM 128 KB
+  cm4:
+    peak_flops: {fp32: 0.48e+9, fp16: 0.24e+9, int8: 0.96e+9}  # 1 FMA/cycle, int8 按 DSP SIMD 估
+    peak_bytes: 1.92e+9      # 64bit @240MHz, 估算
+    l2_bytes: 524288         # AXI SRAM 512 KB (共享)
+    l1_bytes: 32768          # DTCM 32 KB
+
+  # ── 移动 CPU/GPU/DSP (latbench / nnmeter) ─────────
+  cortexa76:                        # nn-Meter: Kirin 980 A76 x4
+    peak_flops: {fp32: 0.083e+12}   # 4c @2.6G NEON, 估算
+    peak_bytes: 0.0299e+12   # 估算
+    l2_bytes: 2097152        # 估算
+    l1_bytes: 65536
+
+  mobile-cpu-snapdragon-450-cortex-a53:
+    peak_flops: {fp32: 0.03e+12}    # 估算
+    peak_bytes: 0.0075e+12  # 估算
+    l2_bytes: 524288         # 估算
+    l1_bytes: 32768
+
+  mobile-cpu-snapdragon-675-kryo-460:
+    peak_flops: {fp32: 0.06e+12}    # 估算
+    peak_bytes: 0.0149e+12  # 估算
+    l2_bytes: 1048576        # 估算
+    l1_bytes: 65536
+
+  mobile-cpu-snapdragon-855-kryo-485:
+    peak_flops: {fp32: 0.11e+12}    # 估算
+    peak_bytes: 0.0171e+12  # 估算
+    l2_bytes: 1048576        # 估算
+    l1_bytes: 65536
+
+  adreno640:                        # nn-Meter 命名
+    peak_flops: {fp32: 0.9e+12}     # 估算
+    peak_bytes: 0.0171e+12  # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768
+
+  adreno630:                        # nn-Meter 命名, 同 pixel3
+    peak_flops: {fp32: 0.5e+12}     # 估算
+    peak_bytes: 0.0299e+12  # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768
+
+  myriadvpu:                        # Movidius Myriad 2
+    peak_flops: {fp16: 0.1e+12}     # 估算
+    peak_bytes: 0.01e+12     # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768
+
+  mobile-gpu-snapdragon-450-adreno-506:
+    peak_flops: {fp32: 0.05e+12}    # 估算
+    peak_bytes: 0.0075e+12  # 估算
+    l2_bytes: 131072         # 估算
+    l1_bytes: 32768
+
+  mobile-gpu-snapdragon-675-adreno-612:
+    peak_flops: {fp32: 0.15e+12}    # 估算
+    peak_bytes: 0.0149e+12  # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768
+
+  mobile-gpu-snapdragon-855-adreno-640:
+    peak_flops: {fp32: 0.9e+12}     # 估算
+    peak_bytes: 0.0171e+12  # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768
+
+  mobile-dsp-snapdragon-675-hexagon-685:
+    peak_flops: {int8: 1.3e+12}     # 估算
+    peak_bytes: 0.0149e+12  # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768
+
+  mobile-dsp-snapdragon-855-hexagon-690:
+    peak_flops: {int8: 2.0e+12}     # 估算
+    peak_bytes: 0.0171e+12  # 估算
+    l2_bytes: 262144         # 估算
+    l1_bytes: 32768
+
+  # ── 服务器 CPU (hwgptbench) ────────────────────────
+  cpu_xeon_silver:
+    peak_flops: {fp32: 1.0e+12}     # 估算
+    peak_bytes: 0.115e+12   # DDR4-2400 6ch
+    l2_bytes: 12582912       # 1 MB/核, 估算
+    l1_bytes: 32768
+
+  cpu_xeon_gold:
+    peak_flops: {fp32: 1.8e+12}     # 估算
+    peak_bytes: 0.141e+12   # DDR4-2933 6ch
+    l2_bytes: 16777216       # 估算
+    l1_bytes: 32768
+
+  cpu_amd_7502:                     # EPYC 7502 32c @2.5G
+    peak_flops: {fp32: 1.28e+12}    # AVX2
+    peak_bytes: 0.205e+12   # DDR4-3200 8ch
+    l2_bytes: 16777216       # 估算
+    l1_bytes: 32768
+
+  cpu_amd_7452:                     # EPYC 7452 24c @2.35G
+    peak_flops: {fp32: 0.90e+12}
+    peak_bytes: 0.205e+12
+    l2_bytes: 16777216       # 估算
+    l1_bytes: 32768
+
+  cpu_amd_7513:                     # EPYC 7513 32c @2.6G
+    peak_flops: {fp32: 1.33e+12}
+    peak_bytes: 0.205e+12
+    l2_bytes: 16777216       # 估算
+    l1_bytes: 32768
+
+  # ── 通用补充: 数据中心 / 工作站 GPU (非特定 bench) ──
+  t4:                          # Tesla T4 (Turing, 单槽推理卡)
+    peak_flops: {fp32: 8.1e+12, fp16: 65.0e+12, int8: 130.0e+12}  # FP32-acc 稠密
+    peak_bytes: 0.320e+12
+    l2_bytes: 4194304        # 4 MB
+    l1_bytes: 98304          # 96 KB / SM
+
+  l4:                          # NVIDIA L4 (Ada, 推理卡)
+    peak_flops: {fp32: 30.3e+12, fp16: 121.0e+12, int8: 242.0e+12}
+    peak_bytes: 0.300e+12
+    l2_bytes: 50331648       # 48 MB
+    l1_bytes: 131072
+
+  a10:                         # NVIDIA A10 (Ampere)
+    peak_flops: {fp32: 31.2e+12, fp16: 125.0e+12, int8: 250.0e+12}
+    peak_bytes: 0.600e+12
+    l2_bytes: 6291456        # 6 MB
+    l1_bytes: 131072
+
+  a30:                         # NVIDIA A30 (Ampere, 面向推理)
+    peak_flops: {fp32: 10.3e+12, fp16: 165.0e+12, int8: 330.0e+12}
+    peak_bytes: 0.933e+12
+    l2_bytes: 25165824       # 24 MB
+    l1_bytes: 196608
+
+  rtx6000-ada:                 # RTX 6000 Ada (工作站)
+    peak_flops: {fp32: 91.1e+12, fp16: 182.2e+12, int8: 364.4e+12}
+    peak_bytes: 0.960e+12
+    l2_bytes: 50331648       # 48 MB
+    l1_bytes: 131072
+
+  tesla-k80:                   # 双芯 GK210 (Kepler), 无 tensor core
+    peak_flops: {fp32: 8.74e+12, fp16: 0.14e+12}   # fp16 约 1/64 速率
+    peak_bytes: 0.480e+12
+    l2_bytes: 1572864        # 估算
+    l1_bytes: 131072         # 估算
+
+  tesla-m40:                   # Maxwell GM204
+    peak_flops: {fp32: 7.0e+12, fp16: 0.11e+12}    # fp16 约 1/64 速率
+    peak_bytes: 0.288e+12
+    l2_bytes: 3145728        # 3 MB
+    l1_bytes: 98304
+
+  # ── 通用补充: 消费级 GPU (非特定 bench) ────────────
+  rtx4090:                     # Ada, FP32-acc 稠密
+    peak_flops: {fp32: 82.6e+12, fp16: 165.2e+12, int8: 330.3e+12}
+    peak_bytes: 1.008e+12
+    l2_bytes: 75497472       # 72 MB
+    l1_bytes: 131072
+
+  rtx4080:
+    peak_flops: {fp32: 48.7e+12, fp16: 97.5e+12, int8: 195.0e+12}
+    peak_bytes: 0.7168e+12
+    l2_bytes: 67108864       # 64 MB
+    l1_bytes: 131072
+
+  rtx4070:
+    peak_flops: {fp32: 29.1e+12, fp16: 58.3e+12, int8: 116.5e+12}
+    peak_bytes: 0.504e+12
+    l2_bytes: 37748736       # 36 MB
+    l1_bytes: 131072
+
+  rtx3070:
+    peak_flops: {fp32: 20.3e+12, fp16: 40.6e+12, int8: 81.3e+12}
+    peak_bytes: 0.448e+12
+    l2_bytes: 4194304        # 4 MB
+    l1_bytes: 131072
+
+  rtx3060:
+    peak_flops: {fp32: 12.7e+12, fp16: 25.4e+12, int8: 50.8e+12}
+    peak_bytes: 0.360e+12
+    l2_bytes: 3145728        # 3 MB
+    l1_bytes: 131072
+
+  gtx1080:                     # Pascal, fp16 约 1/64
+    peak_flops: {fp32: 8.9e+12, fp16: 0.139e+12}
+    peak_bytes: 0.320e+12
+    l2_bytes: 2097152        # 2 MB
+    l1_bytes: 98304
+
+  gtx1070:
+    peak_flops: {fp32: 6.5e+12, fp16: 0.101e+12}
+    peak_bytes: 0.256e+12
+    l2_bytes: 2097152
+    l1_bytes: 98304
+
+  gtx1060:
+    peak_flops: {fp32: 4.4e+12, fp16: 0.069e+12}
+    peak_bytes: 0.192e+12
+    l2_bytes: 1572864        # 1.5 MB
+    l1_bytes: 98304
+
+  # ── 通用补充: Jetson / 嵌入式 GPU (非特定 bench) ───
+  jetson-agx-orin:             # Ampere, 60W 全开
+    peak_flops: {fp32: 5.3e+12, fp16: 42.5e+12, int8: 85.0e+12}
+    peak_bytes: 0.2048e+12
+    l2_bytes: 4194304        # 估算
+    l1_bytes: 131072
+
+  jetson-orin-nano:            # Ampere, 8GB
+    peak_flops: {fp32: 1.0e+12, fp16: 8.0e+12, int8: 16.0e+12}   # 估算
+    peak_bytes: 0.068e+12    # LPDDR5, 估算
+    l2_bytes: 2097152        # 估算
+    l1_bytes: 131072         # 估算
+
+  # ── 通用补充: 桌面 / 服务器 CPU (非特定 bench) ─────
+  intel-i9-9900k:
+    peak_flops: {fp32: 0.46e+12}   # 8c @3.6G AVX2 2xFMA256, 估算
+    peak_bytes: 0.0416e+12   # DDR4-2666 双通道
+    l2_bytes: 2097152        # 256 KB/核
+    l1_bytes: 32768
+
+  intel-i9-13900k:             # 8P+16E, 估算
+    peak_flops: {fp32: 0.9e+12}
+    peak_bytes: 0.0896e+12   # DDR5-5600 双通道, 估算
+    l2_bytes: 33554432       # 估算
+    l1_bytes: 32768
+
+  amd-ryzen9-5950x:
+    peak_flops: {fp32: 1.25e+12}   # 16c @4.9G AVX2 2xFMA256
+    peak_bytes: 0.0477e+12   # DDR4-3200 双通道
+    l2_bytes: 8388608        # 512 KB/核 x16
+    l1_bytes: 32768
+
+  amd-ryzen9-7950x:
+    peak_flops: {fp32: 1.5e+12}    # 16c AVX2, 估算
+    peak_bytes: 0.0832e+12   # DDR5-5200 双通道, 估算
+    l2_bytes: 16777216       # 1 MB/核 x16
+    l1_bytes: 32768
+
+  amd-epyc-7763:               # Milan 64c @2.45G
+    peak_flops: {fp32: 2.5e+12}    # 64c AVX2 2xFMA256
+    peak_bytes: 0.2048e+12   # 8ch DDR4-3200
+    l2_bytes: 33554432       # 512 KB/核 x64
+    l1_bytes: 32768
+
+  apple-m1:                    # 8 核 CPU (4P+4E), 统一内存
+    peak_flops: {fp32: 0.22e+12}   # 估算
+    peak_bytes: 0.06825e+12  # 68.25 GB/s 统一内存
+    l2_bytes: 12582912       # 12 MB, 估算
+    l1_bytes: 32768
+
+  apple-m2:
+    peak_flops: {fp32: 0.28e+12}   # 估算
+    peak_bytes: 0.100e+12    # 100 GB/s
+    l2_bytes: 16777216       # 估算
+    l1_bytes: 32768
+
+  # ── 通用补充: 边缘 / 移动 (非特定 bench) ───────────
+  raspi5:                      # BCM2712 Cortex-A76 x4 @2.4G
+    peak_flops: {fp32: 0.153e+12}
+    peak_bytes: 0.017e+12    # LPDDR4X, 估算
+    l2_bytes: 2097152        # 估算
+    l1_bytes: 65536
+
+  snapdragon-888:              # Kryo 680 (X1+3xA78+4xA55), 估算
+    peak_flops: {fp32: 0.5e+12}
+    peak_bytes: 0.0512e+12   # LPDDR5
+    l2_bytes: 2097152        # 估算
+    l1_bytes: 65536

@@ -1,0 +1,3606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ModelPerf</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect width='24' height='24' rx='5' fill='%231F4E79'/><g fill='none' stroke='%23ffffff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M4.5 6 L12 6 M4.5 18 L12 18 M4.5 6 L12 18 M4.5 18 L12 6 M12 6 L19.5 12 M12 18 L19.5 12'/><circle cx='4.5' cy='6' r='1.9' fill='%23ffffff' stroke='none'/><circle cx='4.5' cy='18' r='1.9' fill='%23ffffff' stroke='none'/><circle cx='12' cy='6' r='1.9' fill='%23ffffff' stroke='none'/><circle cx='12' cy='18' r='1.9' fill='%23ffffff' stroke='none'/><circle cx='19.5' cy='12' r='1.9' fill='%23ffffff' stroke='none'/></g></svg>">
+<!-- Google Fonts removed due to network inaccessibility; using system fonts via CSS fallback -->
+<style>
+:root {
+  /* ── Scientific publication palette (slate ink + academic blue) ── */
+  --bg:        #ffffff;
+  --bg-grad:   radial-gradient(1200px 800px at 70% -10%, #f5f8fb 0%, #ffffff 55%);
+  --surface:   #f5f7fa;
+  --surface2:  #eef1f5;
+  --overlay:   #dbe1e8;
+  --overlay2:  #b9c2cd;
+  --text:      #111c28;
+  --text-2:    #1f2c3a;
+  --sub:       #47586b;
+  --sub-2:     #74859a;
+  --border:    #e7ebef;
+  --border-2:  #d2d9e0;
+  --card-bg:   #ffffff;
+  --card-bg-2: #fafbfd;
+  --hover-bg:  #f2f5f8;
+  --accent:    #1f4e79;     /* deep academic blue (PNAS / LaTeX-like) */
+  --accent-2:  #14304d;
+  --select:    #a85a07;     /* darker amber — selection highlight (non-blue) */
+  --select-2:  #c2410c;
+  --accent-soft:#e8f0f7;
+  --accent-soft-border:#c9d8e4;
+  --ok:        #047857;
+  --warn:      #a85a07;
+  --shadow-xs: 0 1px 1px rgba(17,28,40,.04);
+  --shadow-sm: 0 1px 2px rgba(17,28,40,.04);
+  --shadow-md: 0 2px 8px rgba(17,28,40,.05), 0 1px 2px rgba(17,28,40,.03);
+  --shadow-lg: 0 8px 24px rgba(17,28,40,.08), 0 2px 6px rgba(17,28,40,.04);
+  --shadow-focus: 0 0 0 3px rgba(31,78,121,.14);
+  --radius:    7px;
+  --radius-sm: 4px;
+  --radius-lg: 10px;
+  --serif:     Georgia, 'Times New Roman', 'Songti SC', 'STSong', serif;
+  --mono:      'JetBrains Mono','SF Mono','Menlo','Consolas','Courier New',monospace;
+  --sans:      'Inter',-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  /* ── Layout metrics (avoid hard-coded magic numbers) ── */
+  --toolbar-h: 52px;      /* top toolbar height */
+  --status-h:  28px;      /* bottom status bar height */
+  --sidebar-w: 380px;     /* left details sidebar width */
+  --stats-w:   420px;     /* right statistics panel width */
+  --minimap-max-w: 260px; /* minimap max width  (JS mirrors these) */
+  --minimap-max-h: 300px; /* minimap max height */
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg-grad), var(--bg); color: var(--text);
+       font-family: var(--sans);
+       overflow: hidden; height: 100vh; height: 100dvh;
+       display: flex; flex-direction: column;
+       user-select: text;
+       -webkit-font-smoothing: antialiased;
+       text-rendering: optimizeLegibility;
+       font-feature-settings: "cv02","cv03","cv04","cv11","tnum"; }
+/* 拖拽/控件类元素保持不可选中（仅正文与节点文字可复制） */
+#toolbar, #status-bar, #minimap, button, select, label, .t-btn, .stats-tab { user-select: none; }
+
+/* Toolbar */
+#toolbar {
+  height: var(--toolbar-h); background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 14px; position: relative; z-index: 200; flex-shrink: 0;
+  box-shadow: 0 1px 0 rgba(12,27,42,.03), 0 1px 6px rgba(12,27,42,.03);
+}
+.t-logo { display: flex; align-items: center; gap: 9px; margin-right: 6px; }
+.t-logo-mark {
+  width: 26px; height: 26px; border-radius: 6px;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 2px rgba(31,78,121,.20);
+}
+.t-logo-mark svg { width: 15px; height: 15px; }
+.t-logo-text { display: flex; flex-direction: column; line-height: 1.05; }
+.t-logo-name { font-family: var(--serif); font-weight: 600;
+               font-size: 13px; color: var(--text); letter-spacing: -.2px; }
+.t-logo-sub  { font-family: var(--mono); font-size: 9px; color: var(--sub-2);
+               letter-spacing: .1px; margin-top: 1px; white-space: nowrap; }
+.t-btn  { background: transparent; border: 1px solid transparent;
+          color: var(--text-2); padding: 6px 11px; border-radius: var(--radius-sm);
+          cursor: pointer; font-size: 12px; font-family: var(--mono);
+          transition: all .14s cubic-bezier(.4,0,.2,1); white-space: nowrap;
+          display: inline-flex; align-items: center; gap: 6px; }
+.t-btn:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
+.t-btn.active { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-2); font-weight: 600; }
+.t-btn svg { width: 13px; height: 13px; }
+#zoom-label { font-family: var(--mono); font-size: 12px;
+              color: var(--sub); min-width: 46px; text-align: center;
+              font-variant-numeric: tabular-nums; }
+.t-spacer { flex: 1; }
+#upload-btn { cursor: pointer; }
+/* Style dropdown (collapsed theme + node-style selects) */
+.t-style-select { display: block; width: calc(100% - 8px); margin: 4px;
+                  padding: 6px 8px; font-family: var(--mono); font-size: 12px;
+                  color: var(--text); background: var(--surface);
+                  border: 1px solid var(--border); border-radius: var(--radius-sm);
+                  cursor: pointer; }
+.t-style-select:hover { border-color: var(--border-2); }
+.t-style-select:focus { outline: none; border-color: var(--accent);
+                        box-shadow: 0 0 0 3px rgba(31,78,121,.12); }
+
+/* Style panel (theme / node style / metric encoding) */
+.t-style-panel { width: 250px; max-height: calc(100dvh - 80px); overflow-y: auto; }
+.metric-legend { display: flex; align-items: center; gap: 6px; margin: 8px 4px 2px;
+                 font-family: var(--mono); font-size: 10px; color: var(--sub); }
+.metric-gradient { flex: 1; height: 8px; border-radius: 2px;
+                   border: 1px solid var(--border); }
+/* Setting rows: label on the left, control on the right */
+.metric-row { display: flex; align-items: center; justify-content: space-between;
+              gap: 8px; margin: 5px 4px; font-family: var(--mono); font-size: 11px;
+              color: var(--sub); }
+.metric-row-inline { display: flex; align-items: center; gap: 4px; }
+.t-style-mini { width: auto; margin: 0; padding: 3px 6px; font-size: 11px; }
+.t-color-input { width: 26px; height: 22px; padding: 0; border: 1px solid var(--border);
+                 border-radius: var(--radius-sm); background: var(--surface);
+                 cursor: pointer; }
+.t-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
+.t-color-input::-webkit-color-swatch { border: none; border-radius: 2px; }
+.t-range { flex: 1; min-width: 60px; height: 3px; accent-color: var(--accent);
+           cursor: pointer; }
+.t-range-val { font-family: var(--mono); font-size: 10px; color: var(--text);
+               min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+.t-style-hint { margin: 4px 4px 2px; font-size: 10px; color: var(--sub-2);
+                font-family: var(--mono); }
+.t-style-reset { display: flex; align-items: center; justify-content: center; gap: 6px;
+                 width: calc(100% - 8px); margin: 6px 4px 4px; padding: 7px 8px;
+                 font-family: var(--mono); font-size: 11px; color: var(--text-2);
+                 background: var(--surface); border: 1px solid var(--border);
+                 border-radius: var(--radius-sm); cursor: pointer;
+                 transition: all .14s cubic-bezier(.4,0,.2,1); }
+.t-style-reset:hover { background: var(--hover-bg); border-color: var(--border-2); color: var(--text); }
+.t-style-reset svg { width: 13px; height: 13px; }
+.t-style-panel::-webkit-scrollbar { width: 6px; }
+.t-style-panel::-webkit-scrollbar-thumb { background: var(--overlay); border-radius: 3px; }
+
+/* Toolbar button groups — IDE-style clustered controls */
+.t-group { display: inline-flex; align-items: center; gap: 1px;
+           padding: 2px; background: var(--surface);
+           border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.t-group .t-btn { padding: 5px 9px; }
+.t-group .t-btn:hover { background: var(--card-bg); border-color: transparent; color: var(--accent-2); }
+.t-group .t-btn.active { background: var(--card-bg); border-color: var(--accent-soft-border); color: var(--accent-2); }
+.t-group #zoom-label { padding: 0 6px; }
+.t-group .t-dropdown-menu { right: 0; }
+
+/* Layout */
+#app { display: flex; flex: 1 1 auto; min-height: 0; }
+
+/* Sidebar (left, popup-style, mirrors stats-panel design) */
+#sidebar { width: 0; min-width: 0; background: var(--card-bg-2);
+           border-right: 1px solid var(--border);
+           overflow: hidden; display: flex; flex-direction: column;
+           transition: width .26s cubic-bezier(.4,0,.2,1), min-width .26s cubic-bezier(.4,0,.2,1); flex-shrink: 0; }
+#sidebar.open { width: var(--sidebar-w); min-width: var(--sidebar-w); }
+#sidebar::-webkit-scrollbar { width: 6px; }
+#sidebar::-webkit-scrollbar-track { background: transparent; }
+#sidebar::-webkit-scrollbar-thumb { background: var(--overlay); border-radius: 3px; }
+#sidebar::-webkit-scrollbar-thumb:hover { background: var(--overlay2); }
+#sb-header { padding: 12px 18px 10px;
+             border-bottom: 1px solid var(--border);
+             font-size: 12px; font-family: var(--mono);
+             color: var(--sub); text-transform: uppercase; letter-spacing: 1.6px;
+             font-weight: 700; background: var(--card-bg);
+             position: sticky; top: 0; z-index: 10;
+             display: flex; align-items: center; justify-content: space-between; gap: 8px;
+             flex-shrink: 0; }
+#sb-header::before {
+  content: ''; width: 3px; height: 13px; border-radius: 2px;
+  background: var(--accent); display: inline-block;
+}
+.sb-header-title { display: flex; align-items: center; gap: 8px; }
+#sb-empty  { padding: 32px 18px; font-size: 13px; color: var(--sub-2);
+             font-family: var(--mono); line-height: 1.8; text-align: center;
+             flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#sb-content { padding: 10px; display: none;
+             flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#sb-content::-webkit-scrollbar { width: 6px; }
+#sb-content::-webkit-scrollbar-track { background: transparent; }
+#sb-content::-webkit-scrollbar-thumb { background: var(--overlay); border-radius: 3px; }
+#sb-content::-webkit-scrollbar-thumb:hover { background: var(--overlay2); }
+.sb-close { background: none; border: none; font-size: 20px; color: var(--sub);
+            cursor: pointer; padding: 2px 8px; line-height: 1;
+            border-radius: var(--radius-sm); transition: all .12s; flex-shrink: 0; }
+.sb-close:hover { color: var(--text); background: var(--surface); }
+
+/* Sidebar cards */
+.sb-card { background: var(--card-bg); margin: 0 0 10px; border-radius: var(--radius);
+           border: 1px solid var(--border); overflow: hidden;
+           box-shadow: var(--shadow-xs); transition: box-shadow .15s; }
+.sb-card:last-child { margin-bottom: 0; }
+.sb-card-title {
+  padding: 9px 13px; background: linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-2) 100%);
+  font-size: 12px; font-weight: 700; color: var(--sub);
+  text-transform: uppercase; letter-spacing: 1.1px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--mono);
+}
+.toggle-link { color: var(--accent); cursor: pointer; text-transform: none; font-size: 11px; font-weight: 600; }
+.toggle-link:hover { text-decoration: underline; }
+
+.sb-prop-row { border-bottom: 1px solid var(--surface); position: relative; }
+.sb-prop-row:last-child { border-bottom: none; }
+.sb-prop-row.is-extra { display: none; }
+.sb-prop-row.show-extra { display: flex !important; }
+.sb-summary-row { display: flex; justify-content: space-between; align-items: center;
+                      gap: 12px; padding: 7px 13px; border-bottom: 1px solid var(--surface);
+                      min-height: 32px; transition: background .12s; position: relative; }
+.sb-summary-row:last-child { border-bottom: none; }
+.sb-summary-row:hover { background: var(--hover-bg); }
+/* Inline value bar: relative magnitude within an info card (bar colors match
+   the per-card accent: computation=blue, memory=orange, cost=green) */
+.sb-bar { position: absolute; left: 0; top: 2px; bottom: 2px;
+          width: var(--bar-w, 0%); max-width: 100%;
+          background: var(--bar-c, var(--accent)); opacity: .1;
+          border-radius: 3px; pointer-events: none; }
+.sb-summary-key, .sb-summary-val { position: relative; z-index: 1; }
+/* Label never shrinks; the value claims the remaining width and truncates with a
+   single-line ellipsis. Full text is shown via a native tooltip on hover when (and
+   only when) the value actually overflows — see the sb-content mouseover binding. */
+.sb-summary-key { flex: 0 0 auto; font-size: 14px; color: var(--sub); font-family: var(--mono);
+                  font-weight: 500; }
+.sb-summary-val { flex: 1 1 auto; min-width: 0; font-size: 14px; color: var(--text);
+                  font-family: var(--mono); text-align: right; font-weight: 600;
+                  font-variant-numeric: tabular-nums;
+                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.val-num { color: var(--val-c, #D55E00); font-weight: 600; }
+.val-zero { color: var(--sub-2); }
+
+.sb-shape-tag {
+  background: var(--surface); color: var(--text-2); padding: 3px 8px; border-radius: 4px;
+  font-size: 12px; font-weight: 600; border: 1px solid var(--border); font-family: var(--mono);
+  display: flex; align-items: center; gap: 4px;
+}
+.sb-dtype-suffix { color: var(--sub); font-size: 10px; font-weight: 500; border-left: 1px solid var(--border); padding-left: 4px; }
+.sb-op-badge { display: inline-block; padding: 3px 11px; border-radius: 4px; font-size: 13px; font-weight: 700; font-family: var(--mono); color: #fff;
+               box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+/* Canvas — plain background; the dot grid is drawn by applyCanvasStyle()
+   (Style panel → Canvas → Grid on/off) as an inline style so it can be
+   toggled and exported consistently. */
+#canvas-wrap { flex: 1; overflow: hidden; position: relative;
+               background: var(--bg); }
+svg#canvas { width: 100%; height: 100%; cursor: grab; display: block; }
+svg#canvas:active { cursor: grabbing; }
+
+/* Node */
+.node { cursor: pointer; }
+.node .n-body { transition: stroke .15s, filter .15s, stroke-width .15s;
+                filter: drop-shadow(0 1px 2px rgba(15,23,42,.06)); }
+.node:hover    .n-body { stroke-width: 1.3;
+                          filter: drop-shadow(0 3px 8px rgba(15,23,42,.14)); }
+.node.selected .n-body { stroke: #64748b; stroke-width: 1.8;
+                          filter: drop-shadow(0 1px 3px rgba(15,23,42,.14)); }
+.n-type-text  { font-family: var(--mono); font-size: 11px;
+                font-weight: 700; fill: #1e293b; dominant-baseline: middle; text-anchor: middle;
+                letter-spacing: .2px; }
+/* filled 样式下白字压在浅色分类填充上对比度不足：
+   paint-order 让描边压在填充下方，形成一圈深色轮廓，保证可读性 */
+.n-type-text-light { fill: #ffffff; paint-order: stroke;
+                     stroke: rgba(0,0,0,.38); stroke-width: 1.8px; stroke-linejoin: round; }
+
+/* Edge */
+.edge { cursor: pointer; }
+/* 透明加宽命中通道：仅扩大点击区，不影响视觉。
+   non-scaling-stroke 让通道宽度恒定 12 屏幕像素，缩放时不再变细 */
+.edge .e-hit { fill: none; stroke: transparent; stroke-width: 12;
+               vector-effect: non-scaling-stroke;
+               pointer-events: stroke; }
+.edge .e-path { fill: none; stroke: #94a3b8; stroke-width: 1.3;
+                transition: stroke .15s, stroke-width .15s; pointer-events: none; }
+.edge:hover .e-path,
+.edge.selected .e-path { stroke: #64748b; stroke-width: 1.8; }
+.edge .e-label { font-family: var(--mono);
+                     font-size: 9px; fill: var(--sub);
+                     dominant-baseline: central; text-anchor: middle;
+                     pointer-events: none; letter-spacing: 0.1px; font-weight: 600; }
+
+/* Minimap */
+#minimap { position: absolute; bottom: 16px; right: 16px;
+           background: var(--card-bg);
+           border: 1px solid var(--border); border-radius: var(--radius);
+           overflow: hidden; pointer-events: auto; cursor: pointer;
+           box-shadow: var(--shadow-lg); }
+#minimap svg { width: 100%; height: 100%; }
+.mm-node { rx: 1; ry: 1; }
+.mm-edge { fill: none; stroke-width: 0.5; }
+.mm-viewport { fill: rgba(37,99,235,.08); stroke: var(--accent);
+               stroke-width: 1.2; rx: 1; ry: 1; }
+
+/* Drop zone overlay */
+#drop-overlay { position: absolute; inset: 0; background: rgba(247,248,250,.92);
+                backdrop-filter: blur(4px); display: none; align-items: center;
+                justify-content: center; z-index: 400; flex-direction: column; gap: 12px; }
+#drop-overlay.active { display: flex; }
+#drop-inner { border: 2px dashed var(--overlay2); border-radius: var(--radius);
+              padding: 40px 56px; text-align: center; }
+#drop-inner h2 { color: var(--sub); font-family: var(--mono);
+                 font-size: 14px; margin-bottom: 6px; }
+#drop-inner p  { color: var(--sub-2); font-size: 12px; }
+
+/* Stats Panel (right sidebar) */
+#stats-panel { width: 0; min-width: 0; background: var(--card-bg-2);
+               border-left: 1px solid var(--border);
+               overflow: hidden; display: flex; flex-direction: column;
+               transition: width .26s cubic-bezier(.4,0,.2,1), min-width .26s cubic-bezier(.4,0,.2,1); flex-shrink: 0; }
+#stats-panel.open { width: var(--stats-w); min-width: var(--stats-w); }
+#stats-panel-header { display: flex; justify-content: space-between; align-items: center;
+                      padding: 12px 18px; border-bottom: 1px solid var(--border);
+                      flex-shrink: 0; background: var(--card-bg); }
+.stats-panel-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stats-panel-title { font-family: var(--serif); font-size: 14px; font-weight: 700;
+                     color: var(--text); letter-spacing: -.2px; }
+.stats-panel-sub { font-family: var(--mono); font-size: 11px; color: var(--sub);
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                   font-variant-numeric: tabular-nums; }
+.stats-panel-close { background: none; border: none; font-size: 20px; color: var(--sub);
+                     cursor: pointer; padding: 2px 8px; line-height: 1;
+                     border-radius: var(--radius-sm); transition: all .12s; flex-shrink: 0; }
+.stats-panel-close:hover { color: var(--text); background: var(--surface); }
+#stats-panel-body { flex: 1; overflow-y: auto; padding: 14px; }
+#stats-panel-body::-webkit-scrollbar { width: 6px; }
+#stats-panel-body::-webkit-scrollbar-thumb { background: var(--overlay); border-radius: 3px; }
+
+/* KPI summary cards */
+.kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.kpi-card { background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 11px 13px;
+            box-shadow: var(--shadow-xs); position: relative; overflow: hidden;
+            transition: box-shadow .15s, transform .15s; }
+.kpi-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.kpi-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+                    background: var(--accent); }
+.kpi-card.k-flops::before { background: #D55E00; }
+.kpi-card.k-mac::before   { background: #009E73; }
+.kpi-card.k-types::before { background: #7B3294; }
+.kpi-card.k-nodes::before { background: #0072B2; }
+/* Value color echoes the accent bar (colorblind-safe Okabe-Ito) */
+.kpi-card.k-flops .kpi-value { color: #D55E00; }
+.kpi-card.k-mac   .kpi-value { color: #009E73; }
+.kpi-card.k-types .kpi-value { color: #7B3294; }
+.kpi-card.k-nodes .kpi-value { color: #0072B2; }
+.kpi-label { font-family: var(--mono); font-size: 10px; font-weight: 700;
+             color: var(--sub); text-transform: uppercase; letter-spacing: 1px; }
+.kpi-value { font-family: var(--mono); font-size: 19px; font-weight: 700;
+             color: var(--text); margin-top: 3px; line-height: 1.1;
+             font-variant-numeric: tabular-nums; }
+
+.stats-section { margin-bottom: 20px; }
+.stats-section:last-child { margin-bottom: 0; }
+.stats-section-title { font-family: var(--sans); font-size: 12px; font-weight: 700;
+                       color: var(--text); text-transform: uppercase; letter-spacing: .8px;
+                       margin-bottom: 11px; padding-bottom: 7px;
+                       border-bottom: 1px solid var(--border);
+                       display: flex; align-items: center; gap: 7px; }
+.stats-section-title::before { content: ''; width: 3px; height: 11px; border-radius: 2px;
+                               background: var(--accent); }
+.chart-box { background: var(--card-bg); border: 1px solid var(--border);
+             border-radius: var(--radius); padding: 13px 15px; margin-bottom: 10px;
+             box-shadow: var(--shadow-xs); }
+.chart-box:last-child { margin-bottom: 0; }
+.chart-title { font-family: var(--mono); font-size: 11px; font-weight: 700;
+               color: var(--text-2); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .6px; }
+.chart-container { width: 100%; min-height: 160px; }
+.chart-container svg { display: block; }
+.chart-empty { font-family: var(--mono); font-size: 12px; color: var(--sub-2);
+               padding: 28px 0; text-align: center; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 9px;
+                font-family: var(--mono); font-size: 11px; color: var(--sub); }
+.chart-legend-item { display: flex; align-items: center; gap: 4px; }
+.chart-legend-swatch { width: 9px; height: 9px; border-radius: 2px; }
+.d3-axis text { font-family: var(--mono); font-size: 11px; fill: var(--sub); }
+.d3-axis path, .d3-grid path { display: none; }
+.d3-axis line { stroke: var(--border); }
+.d3-grid line { stroke: var(--surface2); stroke-dasharray: 2 3; }
+.d3-bar { transition: filter 120ms ease, opacity 120ms ease; }
+.d3-bar:hover { filter: brightness(1.08); opacity: 1; }
+.chart-container svg { overflow: visible; }
+.d3-tooltip { position: fixed; background: var(--card-bg); border: 1px solid var(--border);
+              padding: 7px 11px; border-radius: var(--radius-sm); font-size: 11px; font-family: var(--mono);
+              color: var(--text); pointer-events: none; z-index: 600; display: none;
+              box-shadow: var(--shadow-lg); }
+
+/* Status bar */
+#status-bar { height: var(--status-h); background: var(--card-bg); border-top: 1px solid var(--border);
+              display: flex; align-items: center; gap: 0; padding: 0 14px;
+              font-family: var(--mono); font-size: 11px; color: var(--sub);
+              flex-shrink: 0; z-index: 150; }
+.sb-item { display: flex; align-items: center; gap: 6px; padding: 0 12px;
+           border-right: 1px solid var(--border); height: 100%; }
+.sb-item:first-child { padding-left: 0; }
+.sb-item:last-child { border-right: none; padding-right: 0; }
+.sb-item-key { color: var(--sub-2); }
+.sb-item-val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sb-filter-chip { border-radius: 5px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border);
+                  border-right: 1px solid var(--accent-soft-border); height: 19px; padding: 0 8px; }
+.sb-filter-chip .sb-item-key { color: var(--accent-2); }
+.sb-filter-chip .sb-item-val { color: var(--accent-2); max-width: 200px; overflow: hidden;
+                             text-overflow: ellipsis; white-space: nowrap; }
+.sb-filter-chip:hover { background: var(--accent); border-color: var(--accent); }
+.sb-filter-chip:hover .sb-item-key,
+.sb-filter-chip:hover .sb-item-val,
+.sb-filter-chip:hover .sb-filter-x { color: #fff; }
+.sb-filter-x { font-size: 13px; line-height: 1; color: var(--accent-2); }
+.sb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+          box-shadow: 0 0 0 3px rgba(5,150,105,.15); transition: background .2s, box-shadow .2s; }
+.sb-dot.tone-busy  { background: var(--accent); box-shadow: 0 0 0 3px rgba(31,78,121,.15); }
+.sb-dot.tone-warn  { background: var(--warn);   box-shadow: 0 0 0 3px rgba(168,90,7,.15); }
+.sb-dot.tone-error { background: #c0392b;       box-shadow: 0 0 0 3px rgba(192,57,43,.15); }
+.sb-spacer { flex: 1; }
+
+/* Search box */
+.t-search { display: flex; align-items: center; gap: 6px;
+            background: var(--card-bg); border: 1px solid var(--border);
+            border-radius: var(--radius-sm); padding: 5px 9px; min-width: 200px; }
+.t-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.t-search svg { width: 13px; height: 13px; color: var(--sub-2); flex-shrink: 0; }
+.t-search input { border: none; outline: none; background: transparent;
+                  font-family: var(--mono); font-size: 12px; color: var(--text);
+                  width: 100%; min-width: 0; }
+.t-search input::placeholder { color: var(--sub-2); }
+.t-search-count { font-family: var(--mono); font-size: 10px; color: var(--sub-2);
+                  flex-shrink: 0; padding-left: 4px; border-left: 1px solid var(--border); }
+.t-search-nav { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+.t-search-btn { background: none; border: none; padding: 2px; cursor: pointer;
+                color: var(--sub); display: flex; align-items: center; border-radius: 3px; }
+.t-search-btn:hover { color: var(--accent); background: var(--surface); }
+.t-search-btn svg { width: 14px; height: 14px; }
+.node.search-current .n-body { stroke: #64748b !important; stroke-width: 2.5 !important;
+                                filter: drop-shadow(0 0 0 2px rgba(15,23,42,.16)); }
+
+/* Export dropdown */
+.t-dropdown { position: relative; }
+.t-dropdown-menu { position: absolute; right: 0; top: calc(100% + 4px);
+                   background: var(--card-bg); border: 1px solid var(--border);
+                   border-radius: var(--radius); box-shadow: var(--shadow-md);
+                   min-width: 200px; padding: 4px; z-index: 500; display: none; }
+.t-dropdown-menu.open { display: block; }
+.t-dropdown-item { display: flex; align-items: center; gap: 8px;
+                   padding: 7px 10px; border-radius: var(--radius-sm);
+                   font-family: var(--sans); font-size: 12px; color: var(--text-2);
+                   cursor: pointer; border: none; background: none; width: 100%;
+                   text-align: left; }
+.t-dropdown-item:hover { background: var(--surface); color: var(--text); }
+.t-dropdown-item svg { width: 14px; height: 14px; color: var(--sub); flex-shrink: 0; }
+.t-dropdown-sep { height: 1px; background: var(--border); margin: 4px 0; }
+.t-dropdown-label { font-family: var(--mono); font-size: 10px; color: var(--sub-2);
+                    text-transform: uppercase; letter-spacing: .6px; padding: 4px 10px 2px; }
+
+/* Stats tabs */
+.stats-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border);
+              flex-shrink: 0; background: var(--card-bg); }
+.stats-tab { padding: 8px 16px; font-family: var(--mono); font-size: 12px;
+             font-weight: 600; color: var(--sub); background: none; border: none;
+             cursor: pointer; border-bottom: 2px solid transparent;
+             text-transform: uppercase; letter-spacing: .6px; }
+.stats-tab:hover { color: var(--text); }
+.stats-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.stats-view { display: none; }
+.stats-view.active { display: block; }
+
+/* Stats table */
+.stats-table-wrap { padding: 12px 18px; overflow: auto; }
+.stats-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+.stats-table thead th { position: sticky; top: 0; background: var(--card-bg);
+                        text-align: right; padding: 8px 10px; color: var(--sub);
+                        font-weight: 700; border-bottom: 1px solid var(--border);
+                        text-transform: uppercase; letter-spacing: .4px; font-size: 11px; }
+.stats-table thead th:first-child { text-align: left; }
+.stats-table tbody td { padding: 6px 10px; text-align: right;
+                        border-bottom: 1px solid var(--border); color: var(--text-2);
+                        font-variant-numeric: tabular-nums; }
+.stats-table tbody td:first-child { text-align: left; color: var(--text); font-weight: 600; }
+.stats-table tbody tr:hover { background: var(--surface); }
+.stats-table tfoot td { padding: 8px 10px; text-align: right; font-weight: 700;
+                        border-top: 2px solid var(--border-2); color: var(--text);
+                        font-variant-numeric: tabular-nums; }
+.stats-table tfoot td:first-child { text-align: left; }
+.table-toolbar { display: flex; align-items: center; justify-content: space-between;
+                 padding: 8px 18px; border-bottom: 1px solid var(--border);
+                 font-family: var(--mono); font-size: 10px; color: var(--sub); }
+.table-toolbar button { background: var(--surface); border: 1px solid var(--border);
+                        padding: 4px 10px; border-radius: var(--radius-sm);
+                        font-family: var(--mono); font-size: 10px; color: var(--text-2);
+                        cursor: pointer; }
+.table-toolbar button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ════════════════════════════════════════════════════════════
+   Beautification layer
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Splash screen ── */
+#splash {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+  background: radial-gradient(1000px 600px at 50% 15%, #12304f 0%, #0a1a2e 55%, #060e1a 100%);
+  transition: opacity .55s ease, visibility .55s ease;
+}
+#splash.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+.splash-logo { position: relative; width: 92px; height: 92px; display: flex;
+               align-items: center; justify-content: center; }
+.splash-logo svg { width: 46px; height: 46px; position: relative; z-index: 2; filter: drop-shadow(0 2px 8px rgba(107,174,214,.35)); }
+.splash-ring { position: absolute; inset: 0; border-radius: 50%;
+               border: 2px solid rgba(107,174,214,.22); }
+.splash-ring:nth-child(1) { animation: splashPulse 2.4s ease-out infinite; }
+.splash-ring:nth-child(2) { animation: splashPulse 2.4s ease-out .8s infinite; }
+.splash-ring:nth-child(3) { animation: splashPulse 2.4s ease-out 1.6s infinite; }
+@keyframes splashPulse {
+  0%   { transform: scale(.55); opacity: .95; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+.splash-name { color: #e8edf3; font-family: var(--serif); font-weight: 600;
+               font-size: 23px; letter-spacing: -.4px; text-align: center; }
+.splash-sub  { color: #6f8299; font-family: var(--mono); font-size: 11px;
+               letter-spacing: .4px; margin-top: 6px; text-align: center; }
+.splash-bar { width: 210px; height: 3px; border-radius: 2px;
+              background: rgba(107,174,214,.14); overflow: hidden; }
+.splash-bar > div { height: 100%; width: 42%; border-radius: 2px;
+                    background: linear-gradient(90deg, #6BAED6, #74C476, #6BAED6);
+                    animation: splashSlide 1.15s ease-in-out infinite; }
+@keyframes splashSlide { 0% { transform: translateX(-120%);} 100% { transform: translateX(380%);} }
+
+/* ── Canvas: static wash only; the dot grid lives in applyCanvasStyle() ── */
+#canvas-wrap::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(900px 600px at 28% 16%, rgba(31,78,121,.045), transparent 62%);
+}
+#canvas { position: relative; z-index: 1; }
+
+/* ── Node / edge entrance ── */
+.node.enter { animation: nodeFade .5s ease backwards; }
+.node.enter .n-body { animation: nodePop .5s cubic-bezier(.2,.9,.3,1.18) backwards;
+                      animation-delay: inherit; transform-box: fill-box; transform-origin: center; }
+.node.enter .n-type-text { animation: nodeFade .45s ease backwards; animation-delay: inherit; }
+.edge.enter { animation: nodeFade .5s ease backwards; }
+@keyframes nodeFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes nodePop  { from { transform: scale(.55); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Hover "data flow" — edges turn into flowing dashes */
+.edge:hover .e-path { stroke-dasharray: 4 5; animation: edgeFlow .8s linear infinite; }
+@keyframes edgeFlow { to { stroke-dashoffset: -18; } }
+
+/* ── Solid, crisp surfaces (paper-ready — no blur) ── */
+#toolbar, #status-bar { background: var(--card-bg); }
+#toolbar { box-shadow: 0 1px 0 rgba(17,28,40,.02), 0 1px 3px rgba(17,28,40,.04); }
+.t-logo-mark { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.t-logo-mark svg { filter: drop-shadow(0 1px 2px rgba(0,0,0,.25)); }
+
+/* ── Sidebar cards entrance ── */
+.sb-card { animation: cardIn .4s ease backwards; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ── KPI cards: gradient sheen + hover lift ── */
+.kpi-card { transition: transform .18s ease, box-shadow .18s ease; }
+.kpi-card::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 34%;
+                   background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.5) 50%, transparent 58%);
+                   transform: translateX(120%); transition: transform .7s ease; pointer-events: none; }
+.kpi-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.kpi-card:hover::after { transform: translateX(0); }
+
+/* ── Tooltip polish ── */
+.d3-tooltip {
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+}
+
+/* ── Minimap glow ── */
+#minimap { box-shadow: var(--shadow-lg), 0 0 0 1px rgba(31,78,121,.05); }
+.mm-node { rx: 2; ry: 2; }
+
+/* ── Donut charts soft shadow ── */
+.chart-container path { transition: filter .15s ease; }
+.chart-container path:hover { filter: drop-shadow(0 2px 6px rgba(15,23,42,.18)); }
+
+/* ── Toolbar buttons share one neutral style; only toggled panels are tinted
+   via the shared .t-btn.active state (see open/closeStatsPanel). ── */
+
+/* ── Keyboard focus ring (nodes / edges are tabbable) ── */
+.node:focus, .edge:focus { outline: none; }
+.node:focus-visible .n-body {
+  stroke: var(--accent) !important; stroke-width: 2 !important;
+  filter: drop-shadow(0 0 0 3px rgba(31,78,121,.22));
+}
+.edge:focus-visible .e-path { stroke: var(--accent); stroke-width: 2.2; }
+
+/* ── Large-graph render overlay (shown while a big graph lays out) ── */
+#render-overlay { position: absolute; inset: 0; z-index: 350;
+  background: rgba(247,248,250,.74); backdrop-filter: blur(2px);
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+#render-overlay.active { display: flex; }
+.ro-spinner { width: 30px; height: 30px; border-radius: 50%;
+  border: 3px solid var(--accent-soft-border); border-top-color: var(--accent);
+  animation: roSpin .7s linear infinite; }
+@keyframes roSpin { to { transform: rotate(360deg); } }
+.ro-text { font-family: var(--mono); font-size: 12px; color: var(--sub); }
+
+/* ── Reduced motion: honor the OS "reduce motion" preference ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .ro-spinner { animation: none; border-top-color: var(--accent-soft-border); }
+  #splash.hide { transition: none; }
+}
+
+/* ── Toast: 非阻塞提示（替代原生 alert） ── */
+#toast-host { position: fixed; bottom: calc(var(--status-h) + 14px); left: 50%;
+  transform: translateX(-50%); z-index: 800; display: flex; flex-direction: column;
+  gap: 8px; align-items: center; pointer-events: none; }
+.toast { background: var(--card-bg); color: var(--text); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 9px 14px;
+  font-family: var(--mono); font-size: 12px; box-shadow: var(--shadow-lg);
+  max-width: min(440px, 82vw); word-break: break-word;
+  opacity: 0; transform: translateY(8px); transition: opacity .25s, transform .25s; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast-error { border-left-color: #c0392b; }
+.toast-warn  { border-left-color: var(--warn); }
+.toast-ok    { border-left-color: var(--ok); }
+
+/* ── Container-level keyboard focus ring (graph canvas is one Tab stop) ── */
+svg#canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── Responsive width breakpoints ── */
+@media (max-width: 1100px) {
+  :root { --sidebar-w: 320px; --stats-w: 340px; }
+}
+@media (max-width: 820px) {
+  :root { --sidebar-w: 100vw; --stats-w: 100vw; }
+  #minimap { display: none; }            /* 小屏隐藏 minimap，避免遮挡内容 */
+  #toolbar { flex-wrap: wrap; height: auto; min-height: var(--toolbar-h);
+             padding: 7px 10px; row-gap: 6px; }
+  .t-logo-text { display: none; }
+  .t-search { min-width: 150px; }
+  .t-spacer { flex-basis: 100%; flex-grow: 0; height: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- Splash screen -->
+<div id="splash">
+  <div class="splash-logo">
+    <span class="splash-ring"></span><span class="splash-ring"></span><span class="splash-ring"></span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="#6BAED6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4.5 6 L12 6 M4.5 18 L12 18 M4.5 6 L12 18 M4.5 18 L12 6 M12 6 L19.5 12 M12 18 L19.5 12"/>
+      <circle cx="4.5" cy="6" r="1.9" fill="#6BAED6" stroke="none"/>
+      <circle cx="4.5" cy="18" r="1.9" fill="#6BAED6" stroke="none"/>
+      <circle cx="12" cy="6" r="1.9" fill="#6BAED6" stroke="none"/>
+      <circle cx="12" cy="18" r="1.9" fill="#6BAED6" stroke="none"/>
+      <circle cx="19.5" cy="12" r="1.9" fill="#6BAED6" stroke="none"/>
+    </svg>
+  </div>
+  <div>
+    <div class="splash-name">ModelPerf</div>
+    <div class="splash-sub">A Deep Learning Model Performance Analyzer</div>
+  </div>
+  <div class="splash-bar"><div></div></div>
+</div>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <div class="t-logo">
+    <div class="t-logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.5 6 L12 6 M4.5 18 L12 18 M4.5 6 L12 18 M4.5 18 L12 6 M12 6 L19.5 12 M12 18 L19.5 12"/>
+        <circle cx="4.5" cy="6" r="1.9" fill="#fff" stroke="none"/>
+        <circle cx="4.5" cy="18" r="1.9" fill="#fff" stroke="none"/>
+        <circle cx="12" cy="6" r="1.9" fill="#fff" stroke="none"/>
+        <circle cx="12" cy="18" r="1.9" fill="#fff" stroke="none"/>
+        <circle cx="19.5" cy="12" r="1.9" fill="#fff" stroke="none"/>
+      </svg>
+    </div>
+    <div class="t-logo-text">
+      <span class="t-logo-name">ModelPerf</span>
+      <span class="t-logo-sub">A Deep Learning Model Performance Analyzer</span>
+    </div>
+  </div>
+
+  <!-- View group: reset / fit / zoom -->
+  <div class="t-group">
+    <button class="t-btn" id="view-100-btn" title="Reset view (fit width)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
+      Reset
+    </button>
+    <button class="t-btn" id="fit-btn" title="Fit to screen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+      Fit
+    </button>
+    <button class="t-btn" id="zoom-out-btn" title="Zoom out">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M21 21l-4.3-4.3"/></svg>
+    </button>
+    <span id="zoom-label">100%</span>
+    <button class="t-btn" id="zoom-in-btn" title="Zoom in">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4.3-4.3"/></svg>
+    </button>
+  </div>
+
+  <!-- Search -->
+  <div class="t-search" id="search-box" title="Press / to focus search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input type="text" id="search-input" aria-label="Search nodes by op_type, id, metric threshold or /regex/"
+           placeholder="Search op_type / id / mac>1M / /regex/...">
+    <span class="t-search-count" id="search-count" style="display:none">0/0</span>
+    <span class="t-search-nav" id="search-nav" style="display:none">
+      <button class="t-search-btn" id="search-prev-btn" title="Previous match (Shift+Enter)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+      </button>
+      <button class="t-search-btn" id="search-next-btn" title="Next match (Enter)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </span>
+  </div>
+
+  <span class="t-spacer"></span>
+
+  <!-- Data group: load / export -->
+  <div class="t-group">
+    <label class="t-btn" id="upload-btn" title="Load JSON graph">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      Load JSON
+      <input type="file" id="file-input" accept=".json" style="display:none">
+    </label>
+    <div class="t-dropdown" id="export-dropdown">
+      <button class="t-btn" id="export-btn" title="Export"
+              aria-haspopup="true" aria-expanded="false" aria-controls="export-menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Export
+      </button>
+      <div class="t-dropdown-menu" id="export-menu" role="menu">
+        <div class="t-dropdown-label">Graph</div>
+        <button class="t-dropdown-item" data-export="svg">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          Graph as SVG
+        </button>
+        <button class="t-dropdown-item" data-export="png">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+          Graph as PNG
+        </button>
+        <button class="t-dropdown-item" data-export="graph-json">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg>
+          Graph as JSON
+        </button>
+        <div class="t-dropdown-sep"></div>
+        <div class="t-dropdown-label">Data</div>
+        <button class="t-dropdown-item" data-export="json">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M10 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM10 12v6"/></svg>
+          Stats as JSON
+        </button>
+        <button class="t-dropdown-item" data-export="csv">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/></svg>
+          Stats as CSV
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Statistics (own group) -->
+  <div class="t-group">
+    <button class="t-btn" id="stats-btn" title="Toggle statistics panel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg>
+      Statistics
+    </button>
+  </div>
+
+  <!-- Style (own group: theme / node style / metric encoding) -->
+  <div class="t-group">
+    <div class="t-dropdown" id="style-dropdown">
+      <button class="t-btn" id="style-btn" title="Color theme, node style & metric encoding"
+              aria-haspopup="true" aria-expanded="false" aria-controls="style-menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 1 10-10c0 1.66-1.34 3-3 3h-1.6a2 2 0 0 0-1.5 3.33A2 2 0 0 1 14.4 22Z"/><circle cx="7.5" cy="11.5" r="1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="7.5" r="1" fill="currentColor" stroke="none"/></svg>
+        Style
+      </button>
+      <div class="t-dropdown-menu t-style-panel" id="style-menu" role="menu">
+        <div class="t-dropdown-label">Color Theme</div>
+        <select class="t-style-select" id="theme-btn" aria-label="Color theme" title="Color theme (applies to nodes and charts)"></select>
+        <div class="t-dropdown-sep"></div>
+        <div class="t-dropdown-label">Node Style</div>
+        <select class="t-style-select" id="node-style-btn" aria-label="Node visual style" title="Node visual style">
+          <option value="topbar">Top bar</option>
+          <option value="filled">Filled</option>
+          <option value="minimal">Minimal</option>
+        </select>
+        <div class="t-dropdown-sep"></div>
+        <div class="t-dropdown-label">Metric Encoding (node fill)</div>
+        <select class="t-style-select" id="metric-btn" aria-label="Metric encoding (node fill)" title="Map node fill color to a metric value">
+          <option value="none">None (type color)</option>
+        </select>
+        <div class="metric-legend" id="metric-legend" style="display:none">
+          <span id="metric-min"></span>
+          <div class="metric-gradient" id="metric-gradient"></div>
+          <span id="metric-max"></span>
+        </div>
+        <div class="metric-row">
+          <span>Colormap</span>
+          <select class="t-style-select t-style-mini" id="metric-cmap" aria-label="Color map" title="Color map">
+            <option value="viridis">Viridis</option>
+            <option value="inferno">Inferno</option>
+            <option value="turbo">Turbo</option>
+            <option value="greys">Greys</option>
+          </select>
+        </div>
+        <div class="metric-row">
+          <span>Scale</span>
+          <select class="t-style-select t-style-mini" id="metric-norm" aria-label="Value normalization" title="Value normalization">
+            <option value="sqrt">Sqrt</option>
+            <option value="linear">Linear</option>
+            <option value="log">Log</option>
+          </select>
+        </div>
+        <div class="t-dropdown-sep"></div>
+        <div class="t-dropdown-label">Canvas</div>
+        <div class="metric-row">
+          <span>Background</span>
+          <div class="metric-row-inline">
+            <input type="color" class="t-color-input" id="bg-color" value="#f6f8fa" aria-label="Canvas background color" title="Canvas background color">
+            <select class="t-style-select t-style-mini" id="grid-toggle" aria-label="Background grid" title="Dotted background grid">
+              <option value="on">Grid on</option>
+              <option value="off">Grid off</option>
+            </select>
+          </div>
+        </div>
+        <div class="metric-row">
+          <span>Node text</span>
+          <input type="range" class="t-range" id="node-font-size" min="8" max="16" step="1" value="12" aria-label="Node label font size (px)" title="Node label font size (px)">
+          <span class="t-range-val" id="node-font-size-val">12</span>
+        </div>
+        <div class="metric-row">
+          <span>Node scale</span>
+          <input type="range" class="t-range" id="node-scale" min="70" max="140" step="5" value="100" aria-label="Node size scale (%)" title="Node size scale (%)">
+          <span class="t-range-val" id="node-scale-val">100%</span>
+        </div>
+        <div class="metric-row">
+          <span>Edge labels</span>
+          <select class="t-style-select t-style-mini" id="edge-label-toggle" aria-label="Edge labels" title="Show tensor shape labels on edges">
+            <option value="on">Show</option>
+            <option value="off">Hide</option>
+          </select>
+        </div>
+        <div class="t-dropdown-sep"></div>
+        <div class="t-dropdown-label">Layout</div>
+        <div class="metric-row">
+          <span>Node gap</span>
+          <input type="range" class="t-range" id="nodesep" min="20" max="120" step="5" value="70" aria-label="Gap between nodes on the same rank (px)" title="Gap between nodes on the same rank (px)">
+          <span class="t-range-val" id="nodesep-val">70</span>
+        </div>
+        <div class="metric-row">
+          <span>Rank gap</span>
+          <input type="range" class="t-range" id="ranksep" min="30" max="160" step="10" value="90" aria-label="Gap between ranks / layers (px)" title="Gap between ranks / layers (px)">
+          <span class="t-range-val" id="ranksep-val">90</span>
+        </div>
+        <div class="t-style-hint">Layout changes re-run dagre and refit the view</div>
+        <button class="t-style-reset" id="style-reset-btn" title="Restore all style settings (theme, node style, canvas, layout) to their defaults">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>
+          Restore defaults
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ──── App body ──── -->
+<div id="app">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div id="sb-header">
+      <span class="sb-header-title" id="sb-header-text">Details</span>
+      <button class="sb-close" id="sb-close-btn" title="Close details">&times;</button>
+    </div>
+    <div id="sb-empty">Click a node or edge to view details</div>
+    <div id="sb-content"></div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="canvas-wrap">
+    <svg id="canvas" tabindex="0" role="application"
+         aria-label="Graph canvas. Use arrow keys to pan, search box to jump between nodes.">
+      <defs id="svg-defs"></defs>
+      <g id="scene"></g>
+    </svg>
+    <!-- Minimap: 只读导航缩略图（键盘用方向键平移 / 搜索框跳转），对辅助技术隐藏以免暴露无键盘入口的可点击图形 -->
+    <div id="minimap" aria-hidden="true"><svg id="mm-svg"></svg></div>
+    <!-- Drop overlay -->
+    <div id="drop-overlay">
+      <div id="drop-inner">
+        <h2>Drop JSON file here</h2>
+        <p>Format: { nodes: [...], edges: [...] }</p>
+      </div>
+    </div>
+    <!-- Render overlay (large graphs) -->
+    <div id="render-overlay">
+      <div class="ro-spinner"></div>
+      <div class="ro-text">Rendering graph…</div>
+    </div>
+  </div>
+
+  <!-- Stats Panel (right sidebar) -->
+  <div id="stats-panel">
+    <div id="stats-panel-header">
+      <div class="stats-panel-titles">
+        <span class="stats-panel-title">Statistics</span>
+        <span class="stats-panel-sub" id="stats-summary-text"></span>
+      </div>
+      <button class="stats-panel-close" id="stats-close-btn">&times;</button>
+    </div>
+    <div class="stats-tabs">
+      <button class="stats-tab active" data-view="charts">Charts</button>
+      <button class="stats-tab" data-view="table">Table</button>
+    </div>
+    <div id="stats-panel-body">
+      <div class="stats-view active" id="view-charts">
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card k-nodes"><div class="kpi-label">Total Nodes</div><div class="kpi-value" id="kpi-nodes">—</div></div>
+        <div class="kpi-card k-types"><div class="kpi-label">Node Types</div><div class="kpi-value" id="kpi-types">—</div></div>
+        <div class="kpi-card k-flops"><div class="kpi-label">Total FLOPs</div><div class="kpi-value" id="kpi-flops">—</div></div>
+        <div class="kpi-card k-mac"><div class="kpi-label">Total MAC</div><div class="kpi-value" id="kpi-mac">—</div></div>
+      </div>
+      <div class="stats-section">
+        <div class="stats-section-title">By Node Type</div>
+        <div class="chart-box">
+          <div class="chart-title">Node Type Distribution</div>
+          <div id="chart-type-donut" class="chart-container"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">FLOPs by Type</div>
+          <div id="chart-flops-by-type" class="chart-container"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">MAC by Type (Read Activation + Read Weight + Write Activation)</div>
+          <div id="chart-mac-by-type" class="chart-container"></div>
+        </div>
+      </div>
+      <div class="stats-section">
+        <div class="stats-section-title">By Operation Type</div>
+        <div class="chart-box">
+          <div class="chart-title">Operation Count Distribution</div>
+          <div id="chart-op-donut" class="chart-container"></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title">Op Instances by Operation</div>
+          <div id="chart-op-bar" class="chart-container"></div>
+        </div>
+      </div>
+      </div>
+      <div class="stats-view" id="view-table">
+        <div class="table-toolbar">
+          <span id="table-info">—</span>
+          <button id="table-csv-btn">Export CSV</button>
+        </div>
+        <div class="stats-table-wrap" id="stats-table-wrap"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div id="status-bar">
+  <div class="sb-item"><span class="sb-dot" id="sb-dot"></span><span class="sb-item-val" id="sb-status" role="status" aria-live="polite">Ready</span></div>
+  <div class="sb-item"><span class="sb-item-key">Graph</span><span class="sb-item-val" id="sb-graph">—</span></div>
+  <div class="sb-item"><span class="sb-item-key">Zoom</span><span class="sb-item-val" id="sb-zoom">100%</span></div>
+  <div class="sb-item"><span class="sb-item-key">Selection</span><span class="sb-item-val" id="sb-sel">none</span></div>
+  <div class="sb-item sb-filter-chip" id="sb-filter" style="display:none;cursor:pointer" title="Filtering nodes by op_type — click to clear">
+    <span class="sb-item-key">Filter</span><span class="sb-item-val" id="sb-filter-val"></span>
+    <span class="sb-filter-x" aria-hidden="true">&times;</span>
+  </div>
+  <div class="sb-item sb-filter-chip" id="sb-search" style="display:none;cursor:pointer" title="Searching nodes — click to clear">
+    <span class="sb-item-key">Search</span><span class="sb-item-val" id="sb-search-val"></span>
+    <span class="sb-filter-x" aria-hidden="true">&times;</span>
+  </div>
+  <div class="sb-spacer"></div>
+  <div class="sb-item" id="sb-meta" style="display:none">
+    <span class="sb-item-val" id="sb-meta-val"></span>
+  </div>
+</div>
+
+<div class="d3-tooltip" id="d3-tooltip"></div>
+
+<!-- 依赖加载器：先尝试 CDN，失败则回退本地 vendor/；
+     两个库都尝试完毕后启动主逻辑（window.__startApp），避免 d3/dagre 缺失时后续脚本 ReferenceError -->
+<script>
+window.__libsReady = false;
+(function loadLibs() {
+  // 离线单文件导出会预先内联 d3/dagre（见 graph_visualize._inline_assets）：
+  // 两者已就绪时直接标记并返回，避免再次发起注定失败的 CDN 请求与超时等待。
+  if (typeof window.d3 !== 'undefined' && typeof window.dagre !== 'undefined') {
+    window.__libsReady = true;
+    if (typeof window.__startApp === 'function') window.__startApp();
+    return;
+  }
+  var sources = {
+    d3:    ['https://cdn.bootcdn.net/ajax/libs/d3/7.8.5/d3.min.js', 'vendor/d3.min.js'],
+    dagre: ['https://cdn.bootcdn.net/ajax/libs/dagre/0.8.5/dagre.min.js', 'vendor/dagre.min.js']
+  };
+  var remaining = Object.keys(sources).length;
+  function finish() {
+    if (--remaining > 0) return;
+    window.__libsReady = true;
+    if (typeof window.__startApp === 'function') window.__startApp();
+  }
+  function loadCandidate(name, list, i) {
+    if (i >= list.length) { window.__cdnFailed = (window.__cdnFailed || '') + name; finish(); return; }
+    var s = document.createElement('script');
+    s.async = false;
+    s.src = list[i];
+    s.onload = finish;
+    s.onerror = function () { loadCandidate(name, list, i + 1); };
+    document.head.appendChild(s);
+  }
+  Object.keys(sources).forEach(function (name) { loadCandidate(name, sources[name], 0); });
+})();
+</script>
+<script>
+// ──── Color themes（内嵌唯一副本）────
+// Each theme defines 5 op-type categories with border + bg colors.
+// Charts reuse the same palette via opTypeColor() for visual consistency.
+// 工具栏下拉切换；选择记入 localStorage（key: modelperf.theme）。
+window.MODELPERF_THEMES = [
+  // Default palette: the Okabe–Ito colorblind-safe set. Carries a `ui` block so
+  // selecting it also restyles the page chrome (neutral light).
+  { name: 'Colorblind Safe', ui: { background:'#f6f8fa', surface:'#eceff3', surfaceAlt:'#e1e6ec', text:'#0c1b2a', textSecondary:'#45566a', textMuted:'#718497', border:'#e0e5ea', borderStrong:'#c7d0d9', accent:'#1F4E79' },
+    elementwise: {border:'#0072B2', bg:'#DCEBF7'}, reduction: {border:'#D55E00', bg:'#F8E2D2'}, dot_product: {border:'#009E73', bg:'#D6EFE3'}, data_movement: {border:'#7B3294', bg:'#EBDDF1'}, default: {border:'#525252', bg:'#ECECEC'} },
+
+  // Cool blue: deep blue + crimson + emerald + plum over a slate ground.
+  { name: 'Cool Blue',
+    elementwise:   { border: '#0F4C81', bg: '#D9E3EF' },
+    reduction:     { border: '#C0392B', bg: '#F4D7D3' },
+    dot_product:   { border: '#16A085', bg: '#D2EBE3' },
+    data_movement: { border: '#8E44AD', bg: '#E7DCEF' },
+    default:       { border: '#34495E', bg: '#E5E8EB' }
+  },
+  // Warm amber: charcoal + amber + sky + rust + sage.
+  { name: 'Warm Amber',
+    elementwise:   { border: '#374E55', bg: '#DDE3E5' },
+    reduction:     { border: '#DF8F44', bg: '#FAE6CF' },
+    dot_product:   { border: '#00A1D5', bg: '#CFEEF8' },
+    data_movement: { border: '#B24745', bg: '#F0D8D7' },
+    default:       { border: '#79AF97', bg: '#E2EFE9' }
+  },
+  // Muted earth: low-saturation Morandi tones.
+  { name: 'Muted Earth',
+    elementwise:   { border: '#9C8E7E', bg: '#EFE9DC' },
+    reduction:     { border: '#7E8A9C', bg: '#DDE2EA' },
+    dot_product:   { border: '#8A9E7E', bg: '#E0E8D8' },
+    data_movement: { border: '#B08E8E', bg: '#EAD8D8' },
+    default:       { border: '#8A8A82', bg: '#E8E6E0' }
+  },
+  // Deep jewel: saturated indigo / magenta / teal / amber.
+  { name: 'Deep Jewel',
+    elementwise:   { border: '#3B3F8C', bg: '#DCDFF1' },
+    reduction:     { border: '#A8326E', bg: '#F1D9E8' },
+    dot_product:   { border: '#1B7F8C', bg: '#D0EDEF' },
+    data_movement: { border: '#C77A30', bg: '#FAE5D0' },
+    default:       { border: '#4A4E69', bg: '#E3E4EC' }
+  },
+  // Greyscale: monotone ladder, print-friendly.
+  { name: 'Greyscale',
+    elementwise:   { border: '#252525', bg: '#E0E0E0' },
+    reduction:     { border: '#636363', bg: '#E8E8E8' },
+    dot_product:   { border: '#969696', bg: '#F0F0F0' },
+    data_movement: { border: '#BDBDBD', bg: '#F5F5F5' },
+    default:       { border: '#737373', bg: '#EAEAEA' }
+  }
+];
+
+/**
+ * Small helper API for theme persistence + page-chrome restyling.
+ */
+window.ModelPerfThemes = (function () {
+  'use strict';
+  const LS_KEY = 'modelperf.theme';
+
+  function find(name) {
+    return window.MODELPERF_THEMES.findIndex(t => t.name === name);
+  }
+
+  return {
+    /** Persist theme choice (by name) in localStorage. */
+    save(name) {
+      try { localStorage.setItem(LS_KEY, name); } catch (e) { /* private mode */ }
+    },
+
+    /** Last saved theme name, or null. */
+    saved() {
+      try { return localStorage.getItem(LS_KEY); } catch (e) { return null; }
+    },
+
+    /** Apply a theme's `ui` block to CSS custom properties (no-op if absent). */
+    applyCSS(theme) {
+      const ui = theme && theme.ui;
+      if (!ui) return;
+      const root = document.documentElement;
+      root.style.setProperty('--bg', ui.background);
+      root.style.setProperty('--surface', ui.surface);
+      root.style.setProperty('--surface2', ui.surfaceAlt);
+      root.style.setProperty('--text', ui.text);
+      root.style.setProperty('--text-2', ui.textSecondary);
+      root.style.setProperty('--sub', ui.textSecondary);
+      root.style.setProperty('--sub-2', ui.textMuted);
+      root.style.setProperty('--border', ui.border);
+      root.style.setProperty('--border-2', ui.borderStrong);
+      root.style.setProperty('--accent', ui.accent);
+      root.style.setProperty('--accent-2', ui.accent);
+      root.style.setProperty('--card-bg', ui.surface);
+      root.style.setProperty('--card-bg-2', ui.surface);
+      root.style.setProperty('--hover-bg', ui.surfaceAlt);
+      root.style.setProperty('--bg-grad',
+        `radial-gradient(1200px 800px at 70% -10%, ${ui.surface} 0%, ${ui.background} 55%)`);
+    }
+  };
+})();
+</script>
+<script>
+'use strict';
+
+// ──── 主逻辑入口：依赖（d3/dagre）就绪后才执行；缺失时给阻塞式提示并直接返回 ────
+// 整个主逻辑都被包裹在此函数内（同时消除 `svg`/`scene`/`defs` 等全局泄漏）。
+window.__startApp = function () {
+if (window.__appStarted) return;
+window.__appStarted = true;
+
+// 依赖缺失：在 splash 上给出清晰的阻塞式错误（不抛 ReferenceError 中断后续流程）
+function showLibError(msg) {
+  const sp = document.getElementById('splash');
+  if (!sp) { console.error(msg); return; }
+  sp.classList.remove('hide');
+  const sub = sp.querySelector('.splash-sub');
+  if (sub) { sub.textContent = msg; sub.style.color = '#e74c3c'; sub.style.fontSize = '11px'; }
+  const bar = sp.querySelector('.splash-bar');
+  if (bar) bar.style.display = 'none';
+}
+if (typeof d3 === 'undefined' || typeof dagre === 'undefined') {
+  showLibError('Required libraries failed to load (d3 / dagre). Check your network and refresh.');
+  return;
+}
+
+// ──── 通用辅助：状态栏 / 轻量提示 / 转义 / 常量 ────
+// 状态栏文字 + 指示灯颜色（绿=就绪 / 黄=已选中 / 红=错误 / 蓝=忙）
+function setStatus(text, tone) {
+  const s = document.getElementById('sb-status');
+  if (s) s.textContent = text;
+  const d = document.getElementById('sb-dot');
+  if (d) d.className = 'sb-dot' + (tone ? ' tone-' + tone : '');
+}
+// 非阻塞 toast（替代原生 alert），风格与页面一致
+function showToast(msg, type) {
+  let host = document.getElementById('toast-host');
+  if (!host) { host = document.createElement('div'); host.id = 'toast-host'; document.body.appendChild(host); }
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' toast-' + type : '');
+  el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  el.textContent = msg;
+  host.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 3400);
+}
+// 空状态提示（内容用 textContent 写入，避免把外部数据当 HTML 注入）
+function showEmptyMessage(msg) {
+  const e = document.getElementById('sb-empty');
+  if (!e) return;
+  e.textContent = 'Click a node or edge to view details';
+  e.appendChild(document.createElement('br'));
+  const s = document.createElement('span');
+  s.style.fontSize = '10px'; s.style.color = 'var(--sub-2)';
+  s.textContent = msg;
+  e.appendChild(s);
+}
+// HTML 转义：所有来自 graph/stats JSON 的插值都必须经过它（防 XSS）
+function esc(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+// 入场动画/遍历阈值（避免大图逐元素动画与全量重建导致卡顿）
+const ANIM = { nodeStaggerMs: 16, edgeStaggerMs: 14, maxDelayMs: 600, maxNodes: 300, maxEdges: 600 };
+// minimap 尺寸（与 :root 的 --minimap-max-* 保持一致）
+const MINIMAP = { maxW: 260, maxH: 300, pad: 4 };
+
+// ── 启动失败兜底：把致命错误显示在 splash 上，而不是永远卡加载界面 ──
+(function splashErrorGuard() {
+  function show(msg) {
+    const sp = document.getElementById('splash');
+    if (!sp || sp.classList.contains('hide')) return;
+    const sub = sp.querySelector('.splash-sub');
+    if (sub) { sub.textContent = msg; sub.style.color = '#e74c3c'; sub.style.fontSize = '11px'; }
+  }
+  if (window.__cdnFailed) {
+    show('CDN load failed (' + window.__cdnFailed + '): check your network and refresh');
+  }
+  window.addEventListener('error', function (ev) {
+    show('Startup failed: ' + (ev.message || 'unknown error') + '<br>Open the console for details (F12)');
+  }, true);
+})();
+
+// ──── CONSTANTS
+const CHAR_W = 8.2, PAD_X = 28, HEADER_H = 30, PORT_R = 3, MIN_NW = 80;
+
+// ──── Pretty display labels (data keys stay raw; only displayed text is prettified)
+const LABEL_MAP = {
+  id: 'ID', op_type: 'Op Type', type: 'Type', source: 'Source', target: 'Target',
+  // computation
+  flops: 'FLOPs', alu: 'ALU', sfu: 'SFU', fma: 'FMA',
+  add: 'Add', sub: 'Sub', mul: 'Mul', div: 'Div', exp: 'Exp', log: 'Log',
+  pow: 'Pow', sqrt: 'Sqrt', trig: 'Trig', hyperbolic: 'Hyperbolic', logic: 'Logic',
+  round: 'Round', sign: 'Sign', rcp: 'Rcp',
+  // memory
+  mac: 'MAC', read_act: 'Read Activation', read_weight: 'Read Weight', write_act: 'Write Activation',
+  mac_wtemp: 'MAC w/ Temp', read_temp: 'Read Temp',
+  read_act_weight: 'Read Activation + Weight', read_act_weight_temp: 'Read Activation + Weight + Temp',
+  write_temp: 'Write Temp', write_act_temp: 'Write Activation + Temp',
+  // cost (roofline, unit: second)
+  serial_cost: 'Serial Cost (s)', roofline_cost: 'Roofline Cost (s)',
+  // tensor info
+  shape: 'Shape', dtype: 'Dtype', dtype_size: 'Dtype Size', tensor_shape: 'Shape',
+  tensor_dtype: 'Dtype', tensor_dtype_size: 'Dtype Size', tensor_bytes: 'Bytes', bytes: 'Bytes',
+  // info card titles
+  computation_info: 'Computation Info', memory_info: 'Memory Info', cost_info: 'Cost Info',
+};
+// Hardware-suffixed keys: serial_cost_hw_rtx3090 → 'Serial Cost (s) [rtx3090]'
+function splitHwKey(k) {
+  const m = String(k).match(/^(.+)_hw_([A-Za-z0-9_]+)$/);
+  return m ? [m[1], m[2]] : null;
+}
+function prettyLabel(k) {
+  if (k == null) return '';
+  const key = String(k);
+  const s = splitHwKey(key);
+  if (s) return prettyLabel(s[0]) + ' [' + s[1] + ']';
+  if (Object.prototype.hasOwnProperty.call(LABEL_MAP, key)) return LABEL_MAP[key];
+  // fallback: underscores → spaces, Title Case (no underscore leaks into the UI)
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+// Number display: large ints grouped, small floats in scientific notation
+// (toLocaleString alone would round cost values like 5e-5 s down to "0")
+function fmtNum(v) {
+  if (!isFinite(v)) return String(v);
+  if (Math.abs(v) >= 1000) return v.toLocaleString();
+  if (Math.abs(v) >= 0.001) return v.toLocaleString(undefined, { maximumFractionDigits: 3 });
+  return v.toExponential(2);
+}
+// Singular form for tensor item labels: "Inputs" → "Input 0"
+const T_SINGULAR = { Inputs: 'Input', Params: 'Param', Outputs: 'Output' };
+
+// ──── Color themes — Academic journal palettes ────
+// Each theme defines 5 op-type categories with border + bg colors.
+// Charts reuse the same palette via opTypeColor() for visual consistency.
+
+// Theme table inlined above (window.MODELPERF_THEMES);
+// each entry: {name, elementwise/reduction/dot_product/data_movement/default: {border,bg}, ui?}
+const COLOR_THEMES = window.MODELPERF_THEMES;
+
+// Default theme: first entry (Unified: Academic)
+let currentThemeIdx = 0;
+function getTheme() { return COLOR_THEMES[currentThemeIdx]; }
+
+// Single source of truth for op_type → color (used by both nodes and charts)
+function opTypeColor(opType) {
+  const theme = getTheme();
+  return theme[getCat(opType)].border;
+}
+
+// 10-color ordered palette derived from current theme (cycled categories)
+// Used when charts need a discrete ordinal palette (e.g. donut/bar by op type).
+function themePalette() {
+  const t = getTheme();
+  return [t.elementwise.border, t.reduction.border, t.dot_product.border,
+          t.data_movement.border, t.default.border,
+          t.elementwise.border, t.reduction.border, t.dot_product.border,
+          t.data_movement.border, t.default.border];
+}
+
+const catMapping = {
+  'Add': 'elementwise', 'Sub': 'elementwise', 'Mul': 'elementwise', 'Div': 'elementwise',
+  'Pow': 'elementwise', 'Sqrt': 'elementwise', 'Mod': 'elementwise', 'Neg': 'elementwise',
+  'Abs': 'elementwise', 'Reciprocal': 'elementwise', 'Ceil': 'elementwise', 'Floor': 'elementwise',
+  'Round': 'elementwise', 'Equal': 'elementwise', 'Greater': 'elementwise', 'GreaterOrEqual': 'elementwise',
+  'Less': 'elementwise', 'LessOrEqual': 'elementwise', 'And': 'elementwise', 'Or': 'elementwise',
+  'Xor': 'elementwise', 'Not': 'elementwise', 'BitwiseAnd': 'elementwise', 'BitwiseOr': 'elementwise',
+  'BitwiseXor': 'elementwise', 'BitwiseNot': 'elementwise', 'Sin': 'elementwise', 'Cos': 'elementwise',
+  'Tan': 'elementwise', 'Asin': 'elementwise', 'Acos': 'elementwise', 'Atan': 'elementwise',
+  'Sinh': 'elementwise', 'Cosh': 'elementwise', 'Tanh': 'elementwise', 'Asinh': 'elementwise',
+  'Acosh': 'elementwise', 'Atanh': 'elementwise', 'Exp': 'elementwise', 'Log': 'elementwise',
+  'Relu': 'elementwise', 'ThresholdedRelu': 'elementwise', 'LeakyRelu': 'elementwise', 'PRelu': 'elementwise',
+  'Sigmoid': 'elementwise', 'Swish': 'elementwise', 'HardSigmoid': 'elementwise', 'HardSwish': 'elementwise',
+  'Softplus': 'elementwise', 'Softsign': 'elementwise', 'Elu': 'elementwise', 'Selu': 'elementwise',
+  'Gelu': 'elementwise', 'Where': 'elementwise', 'IsInf': 'elementwise', 'IsNaN': 'elementwise',
+  'Cast': 'elementwise', 'CastLike': 'elementwise', 'Sign': 'elementwise', 'Shrink': 'elementwise',
+  'Clip': 'elementwise',
+  'ReduceMax': 'reduction', 'ReduceMin': 'reduction', 'ReduceSum': 'reduction', 'ReduceMean': 'reduction',
+  'ReduceProd': 'reduction', 'ReduceL1': 'reduction', 'ReduceL2': 'reduction', 'ReduceLogSum': 'reduction',
+  'ReduceLogSumExp': 'reduction', 'ReduceSumSquare': 'reduction', 'ArgMax': 'reduction', 'ArgMin': 'reduction',
+  'TopK': 'reduction', 'Unique': 'reduction', 'AveragePool': 'reduction', 'MaxPool': 'reduction',
+  'GlobalAveragePool': 'reduction', 'GlobalMaxPool': 'reduction', 'NonZero': 'reduction',
+  'Gemm': 'dot_product', 'MatMul': 'dot_product', 'Conv': 'dot_product', 'ConvTranspose': 'dot_product',
+  'RNN': 'dot_product', 'LSTM': 'dot_product', 'GRU': 'dot_product', 'Attention': 'dot_product',
+  'Reshape': 'data_movement', 'Squeeze': 'data_movement', 'Unsqueeze': 'data_movement', 'Flatten': 'data_movement',
+  'Expand': 'data_movement', 'Shape': 'data_movement', 'Size': 'data_movement', 'Identity': 'data_movement',
+  'Transpose': 'data_movement', 'DepthToSpace': 'data_movement', 'SpaceToDepth': 'data_movement',
+  'ReverseSequence': 'data_movement', 'Slice': 'data_movement', 'Split': 'data_movement', 'Concat': 'data_movement',
+  'Tile': 'data_movement', 'Pad': 'data_movement', 'Gather': 'data_movement', 'GatherElements': 'data_movement',
+  'GatherND': 'data_movement', 'Scatter': 'data_movement', 'ScatterElements': 'data_movement', 'ScatterND': 'data_movement',
+  'Resize': 'data_movement', 'Upsample': 'data_movement', 'Constant': 'data_movement', 'ConstantOfShape': 'data_movement',
+  'EyeLike': 'data_movement', 'Range': 'data_movement', 'OneHot': 'data_movement', 'RandomNormal': 'data_movement',
+  'RandomNormalLike': 'data_movement', 'RandomUniform': 'data_movement', 'RandomUniformLike': 'data_movement'
+};
+
+function getCat(opType) {
+  if (!opType) return 'default';
+  if (catMapping[opType]) return catMapping[opType];
+  const t = opType.toLowerCase();
+  if (t.includes('norm') || t.includes('softmax')) return 'reduction';
+  if (t.includes('conv') || t.includes('gemm') || t.includes('matmul')) return 'dot_product';
+  if (t.includes('pool')) return 'reduction';
+  return 'default';
+}
+
+function getStyle(opType) {
+  const theme = getTheme();
+  const cat = getCat(opType);
+  return { border: theme[cat].border, bg: theme[cat].bg };
+}
+
+// Compute node width from op_type text length (scaled by stylePrefs.nodeScale)
+function nodeWidth(opType) {
+  const text = opType || '?';
+  const base = Math.max(MIN_NW, text.length * CHAR_W + PAD_X);
+  return base * stylePrefs.nodeScale / 100;
+}
+function nodeHeight() { return HEADER_H * stylePrefs.nodeScale / 100; }
+
+// ──── STYLE SETTINGS (canvas / node / edge / layout, persisted) ────
+const STYLE_LS_KEY = 'modelperf.stylePrefs';
+function saveStylePrefs() {
+  try { localStorage.setItem(STYLE_LS_KEY, JSON.stringify(stylePrefs)); } catch (e) { /* private mode */ }
+}
+function restoreStylePrefs() {
+  try {
+    const raw = localStorage.getItem(STYLE_LS_KEY);
+    if (raw) stylePrefs = { ...STYLE_DEFAULTS, ...JSON.parse(raw) };
+  } catch (e) { /* corrupt value → defaults */ }
+  // Reflect restored values into the controls
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('metric-cmap', stylePrefs.metricCmap);
+  set('metric-norm', stylePrefs.metricNorm);
+  set('bg-color', stylePrefs.bgColor);
+  set('grid-toggle', stylePrefs.gridOn ? 'on' : 'off');
+  set('node-font-size', stylePrefs.nodeFontSize);
+  document.getElementById('node-font-size-val').textContent = stylePrefs.nodeFontSize;
+  set('node-scale', stylePrefs.nodeScale);
+  document.getElementById('node-scale-val').textContent = stylePrefs.nodeScale + '%';
+  set('edge-label-toggle', stylePrefs.edgeLabels ? 'on' : 'off');
+  set('nodesep', stylePrefs.nodesep);
+  document.getElementById('nodesep-val').textContent = stylePrefs.nodesep;
+  set('ranksep', stylePrefs.ranksep);
+  document.getElementById('ranksep-val').textContent = stylePrefs.ranksep;
+  applyCanvasStyle();
+}
+
+// Reset every style setting back to its default (theme, node style, metric
+// encoding, canvas and layout) and refresh the view.
+function resetStyleDefaults() {
+  stylePrefs = { ...STYLE_DEFAULTS };
+  saveStylePrefs();
+  restoreStylePrefs();
+
+  currentThemeIdx = 0;
+  const theme = COLOR_THEMES[0];
+  if (theme) {
+    document.getElementById('theme-btn').value = theme.name;
+    if (window.ModelPerfThemes) {
+      ModelPerfThemes.save(theme.name);
+      ModelPerfThemes.applyCSS(theme);
+    }
+  }
+  nodeStyleMode = 'topbar';
+  document.getElementById('node-style-btn').value = 'topbar';
+  metricKey = 'none';
+  document.getElementById('metric-btn').value = 'none';
+  updateMetricDomain();
+  updateMetricLegend();
+
+  if (currentGraph) { relayout(); renderMinimap(); }
+  if (currentStats) renderAllStats(currentStats);
+  showToast('Style settings restored to defaults', 'ok');
+}
+
+function applyCanvasStyle() {
+  const wrap = document.getElementById('canvas-wrap');
+  if (!wrap) return;
+  wrap.style.background = stylePrefs.gridOn
+    ? `radial-gradient(circle at 1px 1px, rgba(15,23,42,.05) 1px, transparent 0) 0 0/22px 22px, ${stylePrefs.bgColor}`
+    : stylePrefs.bgColor;
+}
+
+function applyNodeTextStyle() {
+  document.querySelectorAll('.n-type-text').forEach(t =>
+    t.style.fontSize = stylePrefs.nodeFontSize + 'px');
+}
+
+// Layout changes: rerun dagre with new params, rerender, refit
+function relayout() {
+  if (!currentGraph) return;
+  try {
+    const converted = convertGraphData(currentRawGraph);
+    const graph = buildDagreGraph(converted);
+    currentGraph = graph;
+    setupDefs();
+    renderGraph(currentGraph);
+    renderMinimap();
+    adaptiveFit(300);
+  } catch (err) {
+    setStatus('Layout failed', 'error');
+    showToast(err.message, 'error');
+  }
+}
+let layoutTimer;
+function scheduleRelayout() {
+  clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(relayout, 160);
+}
+
+// ──── METRIC ENCODING (node fill mapped to a metric value) ────
+// Metric values are heavy-tailed (a few huge conv/gemm nodes); the user can
+// pick a normalization (sqrt default) and colormap (viridis default).
+const CMAP_INTERPOLATORS = {
+  viridis: d3.interpolateViridis,
+  inferno: d3.interpolateInferno,
+  turbo:   d3.interpolateTurbo,
+  greys:   t => d3.interpolateGreys(0.15 + t * 0.8),  // avoid washed-out white end
+};
+function cmapColor(t) { return (CMAP_INTERPOLATORS[stylePrefs.metricCmap] || CMAP_INTERPOLATORS.viridis)(t); }
+function normT(v) {
+  if (!metricDomain) return 0;
+  const { lo, hi } = metricDomain;
+  let x;
+  if (stylePrefs.metricNorm === 'linear') {
+    x = (v - lo) / (hi - lo);
+  } else if (stylePrefs.metricNorm === 'log') {
+    const l0 = Math.log10(Math.max(lo, 1e-12)), l1 = Math.log10(Math.max(hi, 1e-12));
+    x = l1 > l0 ? (Math.log10(Math.max(v, 1e-12)) - l0) / (l1 - l0) : 0;
+  } else { // sqrt
+    const s0 = Math.sqrt(Math.max(lo, 0)), s1 = Math.sqrt(Math.max(hi, 0));
+    x = s1 > s0 ? (Math.sqrt(Math.max(v, 0)) - s0) / (s1 - s0) : 0;
+  }
+  return Math.max(0, Math.min(1, x));
+}
+
+function nodeMetricValue(data) {
+  if (metricKey === 'flops') return (data.feat_computation_info || {}).flops || 0;
+  if (metricKey === 'mac')   return (data.feat_memory_info || {}).mac || 0;
+  return (data.feat_cost_info || {})[metricKey] || 0;
+}
+
+function updateMetricDomain() {
+  metricDomain = null;
+  if (metricKey === 'none' || !currentGraph) { updateMetricLegend(); return; }
+  let lo = Infinity, hi = -Infinity;
+  currentGraph.nodes().forEach(nId => {
+    const v = nodeMetricValue(currentGraph.node(nId).data);
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  });
+  if (isFinite(lo) && hi > lo) metricDomain = { lo, hi };
+  updateMetricLegend();
+}
+
+function metricFill(data) {
+  if (!metricDomain) return null;
+  return cmapColor(normT(nodeMetricValue(data)));
+}
+
+function updateMetricLegend() {
+  const box = document.getElementById('metric-legend');
+  if (!box) return;
+  if (!metricDomain) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  const stops = d3.range(0, 1.0001, 0.1).map(cmapColor);
+  document.getElementById('metric-gradient').style.background =
+    `linear-gradient(to right, ${stops.join(',')})`;
+  document.getElementById('metric-min').textContent = fmtNum(metricDomain.lo);
+  document.getElementById('metric-max').textContent = fmtNum(metricDomain.hi);
+}
+
+// Populate metric options from the loaded graph (flops/mac + cost_info keys)
+function populateMetricOptions() {
+  const sel = document.getElementById('metric-btn');
+  if (!sel || !currentGraph) return;
+  const firstId = currentGraph.nodes()[0];
+  const first = firstId && currentGraph.node(firstId).data;
+  sel.innerHTML = '<option value="none">None (type color)</option>';
+  if (!first) { metricKey = 'none'; return; }
+  const opts = [];
+  if ((first.feat_computation_info || {}).flops !== undefined) opts.push(['flops', 'FLOPs']);
+  if ((first.feat_memory_info || {}).mac !== undefined) opts.push(['mac', 'MAC']);
+  Object.keys(first.feat_cost_info || {}).forEach(k => opts.push([k, prettyLabel(k)]));
+  opts.forEach(([v, l]) => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = l;
+    sel.appendChild(o);
+  });
+  if ([...sel.options].some(o => o.value === metricKey)) sel.value = metricKey;
+  else { metricKey = 'none'; sel.value = 'none'; }
+}
+
+// Key metrics (hw-suffixed variants like serial_cost_hw_* always count as key metrics)
+const keyMetrics = ['flops', 'fma', 'mac', 'read_weight', 'read_act', 'write_act',
+  'serial_cost', 'roofline_cost'];
+function isKeyMetric(k) {
+  if (keyMetrics.includes(k)) return true;
+  const s = splitHwKey(k);
+  return s ? keyMetrics.includes(s[0]) : false;
+}
+let showExtrasGlobal = { computation_info: false, memory_info: false, cost_info: false };
+
+// ──── STATE
+let currentGraph = null;
+// Node visual style: 'topbar' | 'filled' | 'minimal'
+let nodeStyleMode = 'topbar';
+let metricKey = 'none';        // metric encoding for node fill ('none' = off)
+let metricDomain = null;       // {lo, hi} of the active metric
+let typeFilter = null;         // op_type filter set from stats charts
+let searchActive = false;      // search box has an active query
+// Style settings (persisted in localStorage; see STYLE_DEFAULTS / saveStylePrefs)
+const STYLE_DEFAULTS = {
+  metricCmap: 'viridis', metricNorm: 'sqrt',
+  bgColor: '#f6f8fa', gridOn: true,
+  nodeFontSize: 12, nodeScale: 100,
+  edgeLabels: true,
+  nodesep: 70, ranksep: 90,
+};
+let stylePrefs = { ...STYLE_DEFAULTS };
+let zoomBehavior = null;
+let currentTransform = d3.zoomIdentity;
+let currentStats = null;        // cached stats for table view + export
+let activeEmbeddedStats = null;  // only stats belonging to the currently embedded graph
+let currentRawGraph = null;     // cached raw graph for export
+let _boundsCache = null;        // cached graph bounds (invalidated on layout/resize)
+let _svgSizeCache = null;       // cached canvas size (invalidated on resize/panel toggle)
+
+const svg    = d3.select('#canvas');
+const scene  = d3.select('#scene');
+const defs   = d3.select('#svg-defs');
+
+// ──── DEFS  (markers)
+function setupDefs() {
+  defs.selectAll('*').remove();
+
+  const aSz = 8;
+  // Clean academic-style filled triangle arrow — using SVG marker
+  defs.append('marker')
+    .attr('id', 'arrow')
+    .attr('viewBox', `0 0 ${aSz} ${aSz}`)
+    .attr('markerWidth', aSz).attr('markerHeight', aSz)
+    .attr('refX', aSz).attr('refY', aSz/2)
+    .attr('orient', 'auto-start-reverse')
+    .attr('markerUnits', 'userSpaceOnUse')
+    .append('path')
+    .attr('d', `M0,0 L${aSz},${aSz/2} L0,${aSz} Z`)
+    .attr('fill', '#6b7280')
+    .attr('stroke', 'none');
+
+  defs.append('marker')
+    .attr('id', 'arrow-hl')
+    .attr('viewBox', `0 0 ${aSz} ${aSz}`)
+    .attr('markerWidth', aSz).attr('markerHeight', aSz)
+    .attr('refX', aSz).attr('refY', aSz/2)
+    .attr('orient', 'auto-start-reverse')
+    .attr('markerUnits', 'userSpaceOnUse')
+    .append('path')
+    .attr('d', `M0,0 L${aSz},${aSz/2} L0,${aSz} Z`)
+    .attr('fill', '#374151')
+    .attr('stroke', 'none');
+}
+
+// ──── DATA CONVERSION  (graph.json ?Dagre format)
+// 字段映射只实现一次，供 elements 数组 / elements 对象两种形态复用
+function mapGraphNode(d) {
+  return {
+    id: d.id, op_type: d.op_type, feat_type: d.feat_type, feat_args: d.feat_args,
+    feat_in_tensor_infos: d.feat_in_tensor_infos,
+    feat_p_tensor_infos: d.feat_p_tensor_infos,
+    feat_out_tensor_infos: d.feat_out_tensor_infos,
+    feat_computation_info: d.feat_computation_info,
+    feat_memory_info: d.feat_memory_info,
+    feat_cost_info: d.feat_cost_info
+  };
+}
+function mapGraphEdge(d) {
+  return {
+    from: d.source || (d.id && d.id.split('->')[0]),
+    to:   d.target || (d.id && d.id.split('->')[1]),
+    id:   d.id,
+    feat_delivered_tensor_info: d.feat_delivered_tensor_info
+  };
+}
+function convertGraphData(raw) {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Invalid graph data: expected an object with "nodes"/"edges" or "elements"');
+  }
+  let nodes, edges;
+  if (raw.nodes && raw.edges) {
+    nodes = raw.nodes;
+    edges = raw.edges;
+  } else if (raw.elements) {
+    const nodeSrc = Array.isArray(raw.elements)
+      ? raw.elements.filter(e => e.group === 'nodes' || (e.data && !e.data.source))
+      : (raw.elements.nodes || []);
+    const edgeSrc = Array.isArray(raw.elements)
+      ? raw.elements.filter(e => e.group === 'edges' || (e.data && e.data.source))
+      : (raw.elements.edges || []);
+    nodes = nodeSrc.map(e => mapGraphNode(e.data));
+    edges = edgeSrc.map(e => mapGraphEdge(e.data));
+  } else {
+    throw new Error('Unknown graph format: expected "nodes"+"edges" or "elements"');
+  }
+  if (!Array.isArray(nodes) || !Array.isArray(edges)) throw new Error('Nodes and edges must be arrays');
+  const ids = new Set();
+  nodes.forEach(n => {
+    if (!n || typeof n.id !== 'string' || !n.id || ids.has(n.id)) throw new Error('Node IDs must be unique non-empty strings');
+    ids.add(n.id);
+    if (n.op_type != null && typeof n.op_type !== 'string') throw new Error('Node op_type must be a string');
+    ['feat_computation_info', 'feat_memory_info', 'feat_cost_info'].forEach(key => {
+      if (n[key] != null && (typeof n[key] !== 'object' || Array.isArray(n[key]) || Object.values(n[key]).some(v => typeof v !== 'number' || !Number.isFinite(v)))) {
+        throw new Error(key + ' must contain finite numeric metrics');
+      }
+    });
+    ['feat_in_tensor_infos', 'feat_p_tensor_infos', 'feat_out_tensor_infos'].forEach(key => {
+      if (n[key] != null && !Array.isArray(n[key])) throw new Error(key + ' must be an array');
+      (n[key] || []).forEach(validateTensor);
+    });
+  });
+  edges.forEach(e => {
+    if (!e || !ids.has(e.from ?? e.source) || !ids.has(e.to ?? e.target)) throw new Error('Edge endpoints must reference existing nodes');
+    if (e.feat_delivered_tensor_info != null) validateTensor(e.feat_delivered_tensor_info);
+  });
+  return { nodes, edges };
+}
+function validateTensor(t) {
+  if (!t || typeof t !== 'object' || Array.isArray(t)) throw new Error('Tensor info must be an object');
+  if (t.tensor_shape != null && !Array.isArray(t.tensor_shape)) throw new Error('Tensor shape must be an array');
+}
+
+function buildDagreGraph(data) {
+  const g = new dagre.graphlib.Graph({ multigraph: true, compound: false });
+  g.setGraph({
+    rankdir:  'TB',  // top-bottom only: ports/edge routing assume TB
+    nodesep:  stylePrefs.nodesep,
+    ranksep:  stylePrefs.ranksep,
+    marginx:  30,
+    marginy:  30,
+    edgesep:  12,
+  });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  data.nodes.forEach(n => {
+    const w = nodeWidth(n.op_type);
+    g.setNode(n.id, { width: w, height: nodeHeight(), data: n });
+  });
+
+  data.edges.forEach((e, i) => {
+    const src = e.from || e.source;
+    const tgt = e.to || e.target;
+    if (src && tgt) {
+      let label = '';
+      if (e.feat_delivered_tensor_info) {
+        const ti = e.feat_delivered_tensor_info;
+        if (ti.tensor_shape && ti.tensor_shape.length > 0) {
+          label = ti.tensor_shape.join('\u00D7');
+        }
+      }
+      g.setEdge(src, tgt, { label, data: e }, `e${i}`);
+    }
+  });
+
+  // dagre.layout 是同步阻塞调用：包一层以便把失败原因清晰地反馈给用户
+  try {
+    dagre.layout(g);
+  } catch (err) {
+    throw new Error('Graph layout failed: ' + (err && err.message ? err.message : err));
+  }
+  _boundsCache = null;   // 布局变化 → 缓存的边界失效
+  return g;
+}
+
+// ──── RENDER
+// Point at half the total arc length along a polyline (edge routing points).
+function polylineMidpoint(pts) {
+  if (!pts || pts.length === 0) return { x: 0, y: 0 };
+  if (pts.length === 1) return pts[0];
+  const segs = [];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i-1].x, dy = pts[i].y - pts[i-1].y;
+    const len = Math.hypot(dx, dy);
+    segs.push({ x0: pts[i-1].x, y0: pts[i-1].y, dx, dy, len });
+    total += len;
+  }
+  let acc = 0;
+  const half = total / 2;
+  for (const s of segs) {
+    if (acc + s.len >= half && s.len > 0) {
+      const t = (half - acc) / s.len;
+      return { x: s.x0 + s.dx * t, y: s.y0 + s.dy * t };
+    }
+    acc += s.len;
+  }
+  return pts[pts.length - 1];
+}
+
+function renderGraph(dagreG) {
+  scene.selectAll('*').remove();
+  const edgeLayer = scene.append('g').attr('class','edge-layer');
+  const nodeLayer = scene.append('g').attr('class','node-layer');
+
+  // 大图关闭逐元素入场动画（避免大量 DOM 同时动画导致卡顿）
+  const animateEdges = dagreG.edgeCount() <= ANIM.maxEdges;
+  const animateNodes = dagreG.nodeCount() <= ANIM.maxNodes;
+
+// Edges
+  let edgeIdx = 0;
+  dagreG.edges().forEach(eKey => {
+    const edge = dagreG.edge(eKey);
+    const pts  = edge.points;
+    if (!pts || pts.length < 2) return;
+
+    // curveLinear — dagre already provides routing points, no overshoot.
+    // Trim back 2px so arrow tip (refX=10) lands right at node boundary.
+    const pathGen = d3.line().x(d=>d.x).y(d=>d.y).curve(d3.curveLinear);
+    const last  = pts[pts.length-1];
+    const prev  = pts[pts.length-2];
+    const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+    const trim  = 2;
+    const trimmedPts = [...pts.slice(0, -1),
+      { x: last.x - Math.cos(angle)*trim, y: last.y - Math.sin(angle)*trim }];
+
+    // tabindex=-1 与节点一致：点击时焦点落在边的 <g>（其 :focus 已去掉外框），
+    // 否则焦点会冒泡到画布 <svg tabindex=0>，触发整块画布的 :focus-visible 外框。
+    const eg = edgeLayer.append('g').attr('class', animateEdges ? 'edge enter' : 'edge')
+      .attr('tabindex', '-1').attr('role', 'button')
+      .attr('data-v', eKey.v).attr('data-w', eKey.w)
+      .attr('aria-label', `Edge ${eKey.v} to ${eKey.w}`);
+    // 入场错峰（大图已整体关闭动画）
+    if (animateEdges) eg.style('animation-delay', (Math.min(edgeIdx * ANIM.edgeStaggerMs, ANIM.maxDelayMs)) + 'ms');
+    edgeIdx++;
+    // 透明加宽命中通道（先画，压在可见线下方）；宽度由 CSS 的
+    // non-scaling-stroke 固定为 12 屏幕像素，缩放不改变可点区域
+    eg.append('path').attr('class','e-hit')
+      .attr('d', pathGen(trimmedPts))
+      .attr('fill','none').attr('stroke','transparent').attr('stroke-width', 12)
+      .attr('stroke-linecap','round');
+    eg.append('path').attr('class','e-path')
+      .attr('d', pathGen(trimmedPts))
+      .attr('marker-end', 'url(#arrow)');
+
+    // Edge label (tensor shape) — anchor at the arc-length midpoint of the
+    // routed polyline (stable for multi-point / skip edges, unlike the k-th
+    // point which can sit next to an intermediate node); can be hidden from
+    // Style panel (large graphs get visually crowded with labels).
+    if (edge.label && stylePrefs.edgeLabels) {
+      const mid = polylineMidpoint(pts);
+      const labelText = edge.label;
+      const labelLen = labelText.length * 5.6 + 8;
+      const labelH = 13;
+      eg.append('rect')
+        .attr('x', mid.x - labelLen/2).attr('y', mid.y - labelH/2)
+        .attr('width', labelLen).attr('height', labelH)
+        .attr('rx', 2.5).attr('ry', 2.5)
+        .attr('fill', '#ffffff').attr('stroke', '#e5e7eb').attr('stroke-width', 0.5)
+        .style('pointer-events', 'none');
+      eg.append('text').attr('class','e-label')
+        .attr('x', mid.x).attr('y', mid.y)
+        .text(labelText);
+    }
+
+    // Edge click activation（键盘导航改由容器级方向键 + 搜索框承担，见 setupZoom）
+    eg.on('click', (event) => {
+      event.stopPropagation();
+      selectEdge(edge, eg.node(), eKey);
+    });
+  });
+
+// Nodes
+  let nodeIdx = 0;
+  dagreG.nodes().forEach(nId => {
+    const n    = dagreG.node(nId);
+    const data = n.data;
+    const pal  = getStyle(data.op_type);
+    const x    = n.x - n.width/2;
+    const y    = n.y - n.height/2;
+    const w    = n.width, h = n.height;
+
+    // 节点不进 Tab 顺序（否则大图会产生上千个 Tab stop）；键盘导航由容器方向键 + 搜索框承担，
+    // 节点仍可被 JS 聚焦（tabindex=-1）以支持 Enter/Space 选中。
+    const ng = nodeLayer.append('g').attr('class', animateNodes ? 'node enter' : 'node').attr('tabindex', '-1')
+      .attr('role', 'button')
+      .attr('transform', `translate(${x},${y})`)
+      .attr('data-id', nId)
+      .datum(data)
+      .attr('aria-label', `${data.op_type || data.feat_type || 'Node'} ${nId}`);
+    // 入场错峰（大图已整体关闭动画）
+    if (animateNodes) ng.style('animation-delay', (Math.min(nodeIdx * ANIM.nodeStaggerMs, ANIM.maxDelayMs)) + 'ms');
+    nodeIdx++;
+
+    // Clip path for rounded corners (shared by body + accent bar)
+    const clipId = `clip-${nId.replace(/[^a-zA-Z0-9]/g,'_')}`;
+    ng.append('clipPath').attr('id', clipId)
+      .append('rect').attr('width',w).attr('height',h).attr('rx',4).attr('ry',4);
+
+    // ── Style variants ─────────────────────────────────────────
+    // Metric encoding overrides the body fill (border keeps the type color)
+    const mFill = metricFill(data);
+    if (nodeStyleMode === 'topbar') {
+      // White card + 5px colored top accent bar (academic paper style)
+      ng.append('rect').attr('class','n-body')
+        .attr('width', w).attr('height', h).attr('rx', 4).attr('ry', 4)
+        .attr('fill', mFill || '#ffffff').attr('stroke', pal.border).attr('stroke-width', 1);
+      ng.append('rect')
+        .attr('width', w).attr('height', 5)
+        .attr('fill', pal.border).attr('clip-path', `url(#${clipId})`);
+      ng.append('text').attr('class','n-type-text')
+        .attr('x', w/2).attr('y', h/2 + 1)
+        .text(data.op_type || data.feat_type || '?');
+    } else if (nodeStyleMode === 'filled') {
+      // Solid color fill (category color) + white text — vibrant presentation style
+      ng.append('rect').attr('class','n-body')
+        .attr('width', w).attr('height', h).attr('rx', 4).attr('ry', 4)
+        .attr('fill', mFill || pal.border).attr('stroke', pal.border).attr('stroke-width', 1.2);
+      ng.append('text').attr('class','n-type-text n-type-text-light')
+        .attr('x', w/2).attr('y', h/2)
+        .text(data.op_type || data.feat_type || '?');
+    } else { // 'minimal'
+      // Transparent fill + colored border only (lightweight wireframe)
+      ng.append('rect').attr('class','n-body')
+        .attr('width', w).attr('height', h).attr('rx', 4).attr('ry', 4)
+        .attr('fill', mFill || 'none').attr('stroke', pal.border).attr('stroke-width', 1.2);
+      ng.append('text').attr('class','n-type-text')
+        .attr('x', w/2).attr('y', h/2)
+        .text(data.op_type || data.feat_type || '?');
+    }
+
+    // Click activation（键盘导航改由容器级方向键 + 搜索框承担）
+    ng.on('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault(); event.stopPropagation();
+        selectNode(nId, data, ng.node());
+      }
+    });
+    ng.on('click', (event) => {
+      event.stopPropagation();
+      selectNode(nId, data, ng.node());
+    });
+  });
+
+  // Style-driven node text size (applies to all style variants)
+  applyNodeTextStyle();
+}
+
+// ──── SIDEBAR
+function toggleExtras(type, cardId) {
+  showExtrasGlobal[type] = !showExtrasGlobal[type];
+  const rows = document.querySelectorAll(`#${cardId} .is-extra`);
+  const link = document.querySelector(`#link-${cardId}`);
+  rows.forEach(r => r.classList.toggle('show-extra', showExtrasGlobal[type]));
+  link.innerText = showExtrasGlobal[type] ? 'Less' : 'More';
+}
+
+function selectEdge(edge, el, eKey) {
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.edge').classed('selected', false);
+  d3.select(el).classed('selected', true);
+
+  const c = document.getElementById('sb-content');
+  const e = document.getElementById('sb-empty');
+  const ht = document.getElementById('sb-header-text');
+  e.style.display = 'none';
+  c.style.display = 'block';
+  if (ht) ht.innerText = 'Edge Details';
+  openSidebar();
+  const se = document.getElementById('sb-sel');
+  if (se) se.textContent = `edge ${(eKey && eKey.v) ? eKey.v + '→' + eKey.w : ''}`;
+  setStatus('Edge selected', 'warn');
+
+  const data = edge.data;
+  const vId = (eKey && eKey.v) || '-';
+  const wId = (eKey && eKey.w) || '-';
+  let html = '';
+
+  html += `<div class="sb-card"><div class="sb-card-title">Edge</div>`;
+  html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('source'))}</span><span class="sb-summary-val">${esc(vId)}</span></div>`;
+  html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('target'))}</span><span class="sb-summary-val">${esc(wId)}</span></div>`;
+  html += `</div>`;
+
+  if (data && data.feat_delivered_tensor_info) {
+    const ti = data.feat_delivered_tensor_info;
+    html += `<div class="sb-card"><div class="sb-card-title">Delivered Tensor</div>`;
+    if (ti.tensor_shape) {
+      html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('shape'))}</span><span class="sb-summary-val">${esc(ti.tensor_shape.join('\u00D7'))}</span></div>`;
+    }
+    if (ti.tensor_dtype) {
+      html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('dtype'))}</span><span class="sb-summary-val">${esc(ti.tensor_dtype)}</span></div>`;
+    }
+    if (ti.tensor_dtype_size !== undefined) {
+      html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('dtype_size'))}</span><span class="sb-summary-val"><span class="val-num">${esc(ti.tensor_dtype_size)}</span> B</span></div>`;
+    }
+    if (ti.tensor_bytes !== undefined) {
+      html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('bytes'))}</span><span class="sb-summary-val"><span class="${ti.tensor_bytes === 0 ? 'val-zero' : 'val-num'}">${esc(ti.tensor_bytes.toLocaleString())}</span></span></div>`;
+    }
+    html += `</div>`;
+  }
+
+  c.innerHTML = html;
+}
+
+function selectNode(nId, data, el) {
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.edge').classed('selected', false);
+  d3.select(el).classed('selected', true);
+
+  const c = document.getElementById('sb-content');
+  const e = document.getElementById('sb-empty');
+  const ht = document.getElementById('sb-header-text');
+  e.style.display = 'none';
+  c.style.display = 'block';
+  if (ht) ht.innerText = 'Node Details';
+  openSidebar();
+  const se = document.getElementById('sb-sel'); if (se) se.textContent = `${data.op_type || '?'} #${nId}`;
+  setStatus('Node selected', 'warn');
+
+  const pal = getStyle(data.op_type);
+  let html = '';
+
+  html += `<div class="sb-card">
+    <div class="sb-card-title">Summary</div>
+    <div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('id'))}</span><span class="sb-summary-val">${esc(data.id)}</span></div>
+    <div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel('op_type'))}</span><span class="sb-summary-val"><span class="sb-op-badge" style="background:${esc(pal.border)}">${esc(data.op_type)}</span></span></div>
+  </div>`;
+
+  if (data.feat_args && Object.keys(data.feat_args).length > 0) {
+    html += `<div class="sb-card"><div class="sb-card-title">Attributes</div>`;
+    for (const [k, v] of Object.entries(data.feat_args)) {
+      html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(prettyLabel(k))}</span><span class="sb-summary-val">${esc(JSON.stringify(v))}</span></div>`;
+    }
+    html += `</div>`;
+  }
+
+  const tKeys = { feat_in_tensor_infos: 'Inputs', feat_p_tensor_infos: 'Params', feat_out_tensor_infos: 'Outputs' };
+  Object.entries(tKeys).forEach(([key, label]) => {
+    if (data[key] && data[key].length > 0) {
+      html += `<div class="sb-card"><div class="sb-card-title">${esc(label)}</div>`;
+      data[key].forEach((t, idx) => {
+        const shape = t.shape ? t.shape.join('\u00D7') : 'scalar';
+        const dtypeStr = t.dtype ? `${t.dtype} ` : '';
+        html += `<div class="sb-summary-row"><span class="sb-summary-key">${esc(T_SINGULAR[label])} ${idx}</span><span class="sb-summary-val"><span class="sb-shape-tag">${esc(shape)}${t.dtype_size ? `<span class="sb-dtype-suffix">${esc(dtypeStr)}${esc(t.dtype_size)}B</span>` : ''}</span></span></div>`;
+      });
+      html += `</div>`;
+    }
+  });
+
+  // Per-card accent: bar fill + value color (matches the KPI card accents)
+  const INFO_COLORS = { computation_info: '#0072B2', memory_info: '#D55E00', cost_info: '#009E73' };
+  ['computation_info', 'memory_info', 'cost_info'].forEach(infoKey => {
+    const infoData = data[`feat_${infoKey}`];
+    if (infoData) {
+      const cardId = `card-${infoKey}`;
+      const isExpanded = showExtrasGlobal[infoKey];
+      const allProps = Object.entries(infoData);
+      const hasExtras = allProps.some(([k]) => !isKeyMetric(k));
+      const nums = allProps.map(([, v]) => (typeof v === 'number' ? v : 0));
+      const maxV = Math.max(...nums, 0);
+      const col = INFO_COLORS[infoKey];
+
+      // toggle-link 用 data-* + 事件委托，避免内联 onclick
+      html += `<div class="sb-card" id="${cardId}">
+        <div class="sb-card-title">${esc(prettyLabel(infoKey))}
+          ${hasExtras ? `<span class="toggle-link" id="link-${cardId}" role="button" tabindex="0" data-info-type="${esc(infoKey)}" data-card="${cardId}">${isExpanded ? 'Less' : 'More'}</span>` : ''}
+        </div>`;
+
+      allProps.forEach(([k, v]) => {
+        const isMetric = isKeyMetric(k);
+        const isZero = v === 0;
+        const pct = (typeof v === 'number' && maxV > 0)
+          ? (Math.sqrt(Math.max(v, 0)) / Math.sqrt(maxV) * 100).toFixed(1) : 0;
+        html += `<div class="sb-summary-row sb-prop-row ${!isMetric ? 'is-extra' : ''} ${!isMetric && isExpanded ? 'show-extra' : ''}"
+          style="--bar-w:${pct}%;--bar-c:${col}">
+          <span class="sb-bar"></span>
+          <span class="sb-summary-key" style="font-family:monospace">${esc(prettyLabel(k))}</span>
+          <span class="sb-summary-val"><span class="${isZero ? 'val-zero' : 'val-num'}" style="--val-c:${col}">${esc(typeof v === 'number' ? fmtNum(v) : v)}</span></span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+  });
+
+  c.innerHTML = html;
+}
+
+function clearSelection() {
+  d3.selectAll('.node').classed('selected', false);
+  d3.selectAll('.edge').classed('selected', false);
+  document.getElementById('sb-empty').style.display = 'block';
+  document.getElementById('sb-content').style.display = 'none';
+  const ht = document.getElementById('sb-header-text');
+  if (ht) ht.innerText = 'Details';
+  const s = document.getElementById('sb-sel'); if (s) s.textContent = 'none';
+  if (currentGraph) setStatus('Ready', 'ok');
+  applyNodeDimming();  // restore search/type-filter state
+}
+
+// ──── SIDEBAR (node/edge details panel)
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  _svgSizeCache = null;   // 面板宽度变化 → 画布尺寸缓存失效
+  scheduleAdaptiveFit();
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  _svgSizeCache = null;
+  scheduleAdaptiveFit();
+}
+
+// 详情卡「More/Less」采用事件委托（取代内联 onclick）
+document.getElementById('sb-content').addEventListener('click', (e) => {
+  const link = e.target.closest('.toggle-link');
+  if (!link) return;
+  toggleExtras(link.dataset.infoType, link.dataset.card);
+});
+document.getElementById('sb-content').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const link = e.target.closest('.toggle-link');
+  if (!link) return;
+  e.preventDefault();
+  toggleExtras(link.dataset.infoType, link.dataset.card);
+});
+// 长值单行省略：仅当真正溢出时，才用原生 tooltip 显示全文（避免无意义的空 tooltip）
+document.getElementById('sb-content').addEventListener('mouseover', (e) => {
+  const el = e.target.closest('.sb-summary-val, .sb-summary-key');
+  if (!el) return;
+  if (el.scrollWidth > el.clientWidth) {
+    if (el.title !== el.textContent) el.title = el.textContent;
+  } else if (el.hasAttribute('title')) {
+    el.removeAttribute('title');
+  }
+});
+
+// ──── ZOOM + PAN
+function setupZoom() {
+  zoomBehavior = d3.zoom()
+    .scaleExtent([0.05, 4])
+    .on('zoom', ({ transform, sourceEvent }) => {
+      // Constrain pan so the graph can't be dragged completely off-screen
+      let t = transform;
+      if (currentGraph) {
+        const bounds = getGraphBounds();          // 已缓存，O(1)
+        const { w: svgW, h: svgH } = getSvgSize(); // 已缓存，避免每次 mousemove 读布局
+        const k = t.k;
+        // The graph occupies [bounds.minX, bounds.maxX] x [bounds.minY, bounds.maxY]
+        // After transform, graph point (gx,gy) maps to (gx*k+tx, gy*k+ty)
+        // We want at least some part of the graph visible:
+        //   left edge of graph < svgW  AND  right edge of graph > 0
+        //   top edge of graph < svgH   AND  bottom edge of graph > 0
+        const margin = 60;
+        const leftEdge = bounds.minX * k + t.x;
+        const rightEdge = bounds.maxX * k + t.x;
+        const topEdge = bounds.minY * k + t.y;
+        const bottomEdge = bounds.maxY * k + t.y;
+
+        let tx = t.x, ty = t.y;
+        // If graph is wider than viewport, prevent dragging past edges
+        if (rightEdge - leftEdge > svgW) {
+          if (leftEdge > margin) tx = margin - bounds.minX * k;
+          if (rightEdge < svgW - margin) tx = svgW - margin - bounds.maxX * k;
+        } else {
+          // Graph fits in viewport: keep it visible
+          if (leftEdge < -margin) tx = -margin - bounds.minX * k;
+          if (rightEdge > svgW + margin) tx = svgW + margin - bounds.maxX * k;
+        }
+        if (bottomEdge - topEdge > svgH) {
+          if (topEdge > margin) ty = margin - bounds.minY * k;
+          if (bottomEdge < svgH - margin) ty = svgH - margin - bounds.maxY * k;
+        } else {
+          if (topEdge < -margin) ty = -margin - bounds.minY * k;
+          if (bottomEdge > svgH + margin) ty = svgH + margin - bounds.maxY * k;
+        }
+        t = d3.zoomIdentity.translate(tx, ty).scale(k);
+      }
+      currentTransform = t;
+      scene.attr('transform', t);
+      updateZoomLabel(t.k);
+      updateMinimapViewport();
+      if (sourceEvent) {
+        document.getElementById('view-100-btn').classList.remove('active');
+        document.getElementById('fit-btn').classList.remove('active');
+      }
+    });
+  svg.call(zoomBehavior);
+  svg.on('click', () => clearSelection());
+}
+
+function fitView() {
+  if (!currentGraph) return;
+  const bounds  = getGraphBounds();
+  const svgEl   = document.getElementById('canvas');
+  const svgW    = svgEl.clientWidth  || 800;
+  const svgH    = svgEl.clientHeight || 600;
+  const scale   = Math.min((svgW - 60) / bounds.w, (svgH - 60) / bounds.h, 1.6);
+  const tx      = (svgW - bounds.w * scale) / 2 - bounds.minX * scale;
+  const ty      = (svgH - bounds.h * scale) / 2 - bounds.minY * scale;
+  svg.transition().duration(500)
+     .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+  document.getElementById('view-100-btn').classList.remove('active');
+  document.getElementById('fit-btn').classList.add('active');
+}
+
+// Adaptive fit — default view on graph load and panel toggle.
+//
+// Scaling rule: pick the smallest of two candidate scales.
+//   scaleW   = (canvasW - 2·padX) / graphW
+//              Fits all columns horizontally. Essential for wide graphs
+//              with parallel branches so nothing is hidden sideways.
+//   scaleMax = 1.0
+//              Readability cap. Prevents over-inflating nodes when the
+//              graph is narrow (e.g., a fully-serial single-column chain).
+//              At 1.0× node text is 11px — the same size used in code
+//              editors — so any further zoom only wastes pixels.
+//
+// Height is deliberately NOT used to shrink the scale: for tall graphs the
+// top stays readable and the user pans down (like scrolling a code file).
+// Click "Fit" instead for a whole-graph overview squeezed onto one screen.
+//
+// The previous rule used only scaleW with no cap, which caused narrow
+// graphs to be zoomed in 5×–10×, making nodes comically large and pushing
+// most of the graph off-screen.
+function adaptiveFit(transitionMs = 500) {
+  if (!currentGraph) return;
+  const bounds = getGraphBounds();
+  const svgEl  = document.getElementById('canvas');
+  const svgW   = svgEl.clientWidth || 800;
+  const padX   = 24, padY = 24;
+
+  const scaleW   = (svgW - padX * 2) / bounds.w;
+  const scaleMax = 1.0;
+  const scale    = Math.min(scaleW, scaleMax);
+
+  // Center horizontally; top-align vertically so the first node is always visible
+  const tx = (svgW - bounds.w * scale) / 2 - bounds.minX * scale;
+  const ty = padY - bounds.minY * scale;
+  const transform = d3.zoomIdentity.translate(tx, ty).scale(scale);
+  if (transitionMs > 0) {
+    svg.transition().duration(transitionMs).call(zoomBehavior.transform, transform);
+  } else {
+    svg.call(zoomBehavior.transform, transform);
+  }
+  document.getElementById('view-100-btn').classList.add('active');
+  document.getElementById('fit-btn').classList.remove('active');
+}
+
+function updateZoomLabel(k) {
+  const pct = Math.round(k * 100) + '%';
+  document.getElementById('zoom-label').textContent = pct;
+  const sz = document.getElementById('sb-zoom');
+  if (sz) sz.textContent = pct;
+}
+
+// 100% button also focuses on the first node at the top
+function zoomTo100() {
+  adaptiveFit();
+}
+
+// Cached canvas size — reading clientWidth/Height forces a layout reflow, so
+// the zoom handler reuses this between invalidations (panel toggle / resize).
+function getSvgSize() {
+  if (_svgSizeCache) return _svgSizeCache;
+  const el = document.getElementById('canvas');
+  _svgSizeCache = { w: el.clientWidth || 800, h: el.clientHeight || 600 };
+  return _svgSizeCache;
+}
+
+// ──── MINIMAP  (centered, click-to-navigate)
+function getGraphBounds() {
+  // 命中缓存直接返回：布局变化时（buildLayout）已置空，故缓存始终与当前布局一致
+  if (_boundsCache) return _boundsCache;
+  // Compute actual bounding box of all nodes
+  if (!currentGraph) return { minX: 0, minY: 0, maxX: 100, maxY: 100, w: 100, h: 100 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  currentGraph.nodes().forEach(nId => {
+    const n = currentGraph.node(nId);
+    if (!n) return;
+    const left = n.x - n.width / 2;
+    const top = n.y - n.height / 2;
+    const right = n.x + n.width / 2;
+    const bottom = n.y + n.height / 2;
+    if (left < minX) minX = left;
+    if (top < minY) minY = top;
+    if (right > maxX) maxX = right;
+    if (bottom > maxY) maxY = bottom;
+  });
+  // Also consider edge points
+  currentGraph.edges().forEach(eKey => {
+    const edge = currentGraph.edge(eKey);
+    if (!edge.points) return;
+    edge.points.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    });
+  });
+  const pad = 10;
+  _boundsCache = { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad,
+                   w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
+  return _boundsCache;
+}
+
+function getMinimapTransform() {
+  // Dynamically size the minimap to match the graph's aspect ratio
+  if (!currentGraph) return { sc: 1, offsetX: 0, offsetY: 0, mmW: 200, mmH: 150 };
+  const bounds = getGraphBounds();
+  const maxW = MINIMAP.maxW, maxH = MINIMAP.maxH, pad = MINIMAP.pad;
+  // Calculate minimap dimensions matching graph aspect ratio
+  const aspect = bounds.w / bounds.h;
+  let mmW, mmH;
+  if (aspect >= 1) {
+    // Wider graph
+    mmW = maxW;
+    mmH = Math.max(120, Math.min(maxH, Math.round(maxW / aspect)));
+  } else {
+    // Taller graph (typical TB layout)
+    mmH = maxH;
+    mmW = Math.max(100, Math.min(maxW, Math.round(maxH * aspect)));
+  }
+  const scX = (mmW - pad * 2) / bounds.w;
+  const scY = (mmH - pad * 2) / bounds.h;
+  const sc = Math.min(scX, scY);
+  // Center the graph within the minimap
+  const usedW = bounds.w * sc;
+  const usedH = bounds.h * sc;
+  const offsetX = (mmW - usedW) / 2;
+  const offsetY = (mmH - usedH) / 2;
+  return { sc, offsetX, offsetY, bounds, mmW, mmH };
+}
+
+function renderMinimap() {
+  if (!currentGraph) return;
+  const { sc, offsetX, offsetY, bounds, mmW, mmH } = getMinimapTransform();
+  // Set minimap container size to match graph aspect ratio
+  const minimapEl = document.getElementById('minimap');
+  minimapEl.style.width = mmW + 'px';
+  minimapEl.style.height = mmH + 'px';
+  const mmSvg = d3.select('#mm-svg'); mmSvg.selectAll('*').remove();
+
+  currentGraph.edges().forEach(eKey => {
+    const edge = currentGraph.edge(eKey);
+    if (!edge.points || edge.points.length < 2) return;
+    mmSvg.append('polyline').attr('class','mm-edge')
+      .attr('points', edge.points.map(p =>
+        `${offsetX + (p.x - bounds.minX) * sc},${offsetY + (p.y - bounds.minY) * sc}`
+      ).join(' '))
+      .attr('stroke', '#d1d5db');
+  });
+
+  currentGraph.nodes().forEach(nId => {
+    const n  = currentGraph.node(nId);
+    const pal = getStyle(n.data.op_type);
+    const bx = offsetX + (n.x - n.width/2 - bounds.minX) * sc;
+    const by = offsetY + (n.y - n.height/2 - bounds.minY) * sc;
+    mmSvg.append('rect').attr('class','mm-node')
+      .attr('x', bx).attr('y', by)
+      .attr('width', Math.max(n.width * sc, 2)).attr('height', Math.max(n.height * sc, 2))
+      .attr('fill', pal.bg).attr('stroke', pal.border).attr('stroke-width', 0.4);
+  });
+
+  mmSvg.append('rect').attr('id','mm-vp').attr('class','mm-viewport');
+  updateMinimapViewport();
+
+  // Click-to-navigate (clamped to graph bounds)
+  minimapEl.onclick = function(event) {
+    if (!currentGraph) return;
+    const rect = minimapEl.getBoundingClientRect();
+    const mx = event.clientX - rect.left;
+    const my = event.clientY - rect.top;
+    const { sc, offsetX, offsetY, bounds } = getMinimapTransform();
+    // Convert minimap click to graph coordinates
+    let graphX = (mx - offsetX) / sc + bounds.minX;
+    let graphY = (my - offsetY) / sc + bounds.minY;
+    // Clamp to graph bounds
+    graphX = Math.max(bounds.minX, Math.min(bounds.maxX, graphX));
+    graphY = Math.max(bounds.minY, Math.min(bounds.maxY, graphY));
+    // Pan so that clamped point is at center of the canvas
+    const svgEl = document.getElementById('canvas');
+    const svgW = svgEl.clientWidth  || 800;
+    const svgH = svgEl.clientHeight || 600;
+    const k = currentTransform.k;
+    const tx = svgW / 2 - graphX * k;
+    const ty = svgH / 2 - graphY * k;
+    svg.transition().duration(300)
+       .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
+  };
+}
+
+function updateMinimapViewport() {
+  if (!currentGraph) return;
+  const vp = document.getElementById('mm-vp');
+  if (!vp) return;
+  const svgEl = document.getElementById('canvas');
+  const svgW = svgEl.clientWidth  || 800;
+  const svgH = svgEl.clientHeight || 600;
+  const { sc, offsetX, offsetY, bounds } = getMinimapTransform();
+  const t = currentTransform;
+  const vpW = (svgW / t.k) * sc;
+  const vpH = (svgH / t.k) * sc;
+  const vpX = offsetX + (-t.x / t.k - bounds.minX) * sc;
+  const vpY = offsetY + (-t.y / t.k - bounds.minY) * sc;
+  vp.setAttribute('x', vpX);
+  vp.setAttribute('y', vpY);
+  vp.setAttribute('width', vpW);
+  vp.setAttribute('height', vpH);
+}
+
+// ──── LOAD GRAPH
+// Graphs at/above this node count lay out on the next frame behind a loading
+// overlay, so the UI is never frozen with no feedback (dagre layout is sync).
+const LARGE_GRAPH_THRESHOLD = 800;
+
+// Show graph-level metadata (devices / dtype / batch_size) in the status bar.
+function updateGraphMeta(meta) {
+  const item = document.getElementById('sb-meta');
+  const val  = document.getElementById('sb-meta-val');
+  if (!item || !val) return;
+  const parts = [];
+  if (meta) {
+    const dt = meta.dtype;
+    if (dt != null) {
+      const s = (typeof dt === 'object') ? (dt.name || dt.type || '') : dt;
+      if (s) parts.push(String(s));
+    }
+    if (meta.batch_size != null && typeof meta.batch_size !== 'object') {
+      parts.push('batch ' + meta.batch_size);
+    }
+    const dev = meta.devices;
+    const devs = Array.isArray(dev) ? dev : (dev != null ? [dev] : []);
+    const devStr = devs
+      .map(d => (d && typeof d === 'object') ? (d.name || d.type || '') : d)
+      .filter(Boolean).join(', ');
+    if (devStr) parts.push(devStr);
+  }
+  if (parts.length) { val.textContent = parts.join(' · '); item.style.display = ''; }
+  else { item.style.display = 'none'; }
+}
+
+let loadGeneration = 0;
+async function loadGraph(data) {
+  const generation = ++loadGeneration;
+  const overlay = document.getElementById('render-overlay');
+  try {
+    const converted = convertGraphData(data);
+    if (converted.nodes.length >= LARGE_GRAPH_THRESHOLD && overlay) {
+      overlay.classList.add('active');
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+    if (generation !== loadGeneration) return;
+    // 验证与布局成功之后才替换当前数据，失败时保留原图。
+    const graph = buildDagreGraph(converted);
+    clearSelection();
+    currentRawGraph = data;
+    activeEmbeddedStats = (data === window.__GRAPH_DATA__ && window.__GRAPH_STATS__) || null;
+    currentStats = null;
+    showExtrasGlobal = { computation_info: false, memory_info: false, cost_info: false };
+    renderLoadedGraph(data, converted, graph);
+    if (document.getElementById('stats-panel').classList.contains('open')) {
+      currentStats = computeGraphStats();
+      renderAllStats(currentStats);
+      renderStatsTable();
+    }
+    setStatus('Graph loaded', 'ok');
+    hideSplash();
+  } catch (err) {
+    setStatus('Load failed', 'error');
+    showToast(err.message || 'Graph load failed', 'error');
+    if (!currentGraph) showEmptyMessage(err.message || 'Graph load failed');
+    hideSplash();
+  } finally {
+    if (generation === loadGeneration && overlay) overlay.classList.remove('active');
+  }
+}
+
+function renderLoadedGraph(data, converted, graph) {
+  currentGraph = graph;
+  populateMetricOptions();
+  updateMetricDomain();
+  typeFilter = null;
+  updateTypeFilterChip();
+  setupDefs();
+  renderGraph(currentGraph);
+  renderMinimap();
+  // Enable search box
+  const si = document.getElementById('search-input');
+  if (si) { si.disabled = false; si.value = ''; }
+  clearNodeFilter();
+  // Update status bar graph summary
+  const sg = document.getElementById('sb-graph');
+  if (sg) sg.textContent = `${converted.nodes.length} nodes · ${converted.edges.length} edges`;
+  updateGraphMeta(data.graph);
+  // Apply adaptive fit immediately (no transition) so the graph is centered
+  // from the very first paint — avoids a brief left-aligned flash.
+  adaptiveFit(0);
+}
+
+// ──── TOOLBAR WIRING
+document.getElementById('fit-btn').addEventListener('click', fitView);
+document.getElementById('view-100-btn').addEventListener('click', zoomTo100);
+document.getElementById('zoom-in-btn').addEventListener('click', () =>
+  svg.transition().duration(200).call(zoomBehavior.scaleBy, 1.3));
+document.getElementById('zoom-out-btn').addEventListener('click', () =>
+  svg.transition().duration(200).call(zoomBehavior.scaleBy, 1/1.3));
+
+// Theme switching — populate the select with the curated palette list.
+(function populateThemeSelect(){
+  const sel = document.getElementById('theme-btn');
+  COLOR_THEMES.forEach((t, i) => {
+    const opt = document.createElement('option');
+    opt.value = t.name; opt.textContent = t.name;
+    if (i === currentThemeIdx) opt.selected = true;
+    sel.appendChild(opt);
+  });
+})();
+// Restore last-saved theme on load (persisted in localStorage by ModelPerfThemes)
+(function restoreSavedTheme(){
+  const saved = window.ModelPerfThemes && ModelPerfThemes.saved();
+  if (!saved) return;
+  const idx = COLOR_THEMES.findIndex(t => t.name === saved);
+  if (idx >= 0) {
+    currentThemeIdx = idx;
+    document.getElementById('theme-btn').value = COLOR_THEMES[idx].name;
+    ModelPerfThemes.applyCSS(COLOR_THEMES[idx]);
+  }
+})();
+document.getElementById('theme-btn').addEventListener('change', (e) => {
+  const idx = COLOR_THEMES.findIndex(t => t.name === e.target.value);
+  if (idx >= 0) {
+    currentThemeIdx = idx;
+    const theme = COLOR_THEMES[idx];
+    if (window.ModelPerfThemes) {
+      ModelPerfThemes.save(theme.name);
+      ModelPerfThemes.applyCSS(theme);
+    }
+    if (currentGraph) { renderGraph(currentGraph); renderMinimap(); }
+    // Re-render charts so they pick up the new palette
+    if (currentStats) renderAllStats(currentStats);
+  }
+});
+document.getElementById('node-style-btn').addEventListener('change', (e) => {
+  nodeStyleMode = e.target.value;
+  if (currentGraph) { renderGraph(currentGraph); renderMinimap(); }
+});
+document.getElementById('metric-btn').addEventListener('change', (e) => {
+  metricKey = e.target.value;
+  updateMetricDomain();
+  if (currentGraph) { renderGraph(currentGraph); renderMinimap(); }
+});
+
+// ── Metric encoding: colormap / normalization
+document.getElementById('metric-cmap').addEventListener('change', e => {
+  stylePrefs.metricCmap = e.target.value;
+  saveStylePrefs();
+  updateMetricLegend();
+  if (currentGraph) { renderGraph(currentGraph); renderMinimap(); }
+});
+document.getElementById('metric-norm').addEventListener('change', e => {
+  stylePrefs.metricNorm = e.target.value;
+  saveStylePrefs();
+  updateMetricLegend();
+  if (currentGraph) { renderGraph(currentGraph); renderMinimap(); }
+});
+
+// ── Canvas: background color / grid / node text size / node scale / edge labels
+document.getElementById('bg-color').addEventListener('input', e => {
+  stylePrefs.bgColor = e.target.value;
+  saveStylePrefs();
+  applyCanvasStyle();
+});
+document.getElementById('grid-toggle').addEventListener('change', e => {
+  stylePrefs.gridOn = e.target.value === 'on';
+  saveStylePrefs();
+  applyCanvasStyle();
+});
+document.getElementById('node-font-size').addEventListener('input', e => {
+  stylePrefs.nodeFontSize = +e.target.value;
+  document.getElementById('node-font-size-val').textContent = stylePrefs.nodeFontSize;
+  saveStylePrefs();
+  applyNodeTextStyle();
+});
+document.getElementById('node-scale').addEventListener('input', e => {
+  stylePrefs.nodeScale = +e.target.value;
+  document.getElementById('node-scale-val').textContent = stylePrefs.nodeScale + '%';
+  saveStylePrefs();
+  scheduleRelayout();
+});
+document.getElementById('edge-label-toggle').addEventListener('change', e => {
+  stylePrefs.edgeLabels = e.target.value === 'on';
+  saveStylePrefs();
+  if (currentGraph) { renderGraph(currentGraph); renderMinimap(); }
+});
+
+// ── Layout: node gap / rank gap (rerun dagre + refit)
+document.getElementById('nodesep').addEventListener('input', e => {
+  stylePrefs.nodesep = +e.target.value;
+  document.getElementById('nodesep-val').textContent = stylePrefs.nodesep;
+  saveStylePrefs();
+  scheduleRelayout();
+});
+document.getElementById('ranksep').addEventListener('input', e => {
+  stylePrefs.ranksep = +e.target.value;
+  document.getElementById('ranksep-val').textContent = stylePrefs.ranksep;
+  saveStylePrefs();
+  scheduleRelayout();
+});
+document.getElementById('style-reset-btn').addEventListener('click', resetStyleDefaults);
+
+// File upload
+function readGraphFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.json')) {
+    showToast('Please select a JSON graph file.', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      loadGraph(JSON.parse(ev.target.result));
+      setStatus('Graph loaded', 'ok');
+    } catch (err) {
+      setStatus('Load failed', 'error');
+      showToast('Invalid JSON: ' + err.message, 'error');
+    }
+  };
+  reader.onerror = () => {
+    setStatus('Load failed', 'error');
+    showToast('Unable to read the selected file.', 'error');
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('file-input').addEventListener('change', e => {
+  readGraphFile(e.target.files[0]);
+  e.target.value = '';
+});
+
+// Drag-and-drop
+const wrap = document.getElementById('canvas-wrap');
+const overlay = document.getElementById('drop-overlay');
+let dragDepth = 0;
+wrap.addEventListener('dragenter', e => {
+  e.preventDefault();
+  dragDepth++;
+  overlay.classList.add('active');
+});
+wrap.addEventListener('dragover', e => {
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+});
+wrap.addEventListener('dragleave', e => {
+  e.preventDefault();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) overlay.classList.remove('active');
+});
+wrap.addEventListener('drop', e => {
+  e.preventDefault();
+  dragDepth = 0;
+  overlay.classList.remove('active');
+  readGraphFile(e.dataTransfer.files[0]);
+});
+
+// Keyboard shortcuts (ignored while typing in inputs / selects)
+document.addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+  const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || e.target.isContentEditable;
+  // Escape 统一处理：关闭下拉框始终生效（输入框内亦可），其余动作仅在非输入态生效
+  if (e.key === 'Escape') {
+    closeAllDropdowns(true);
+    if (!typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      clearSelection(); closeStatsPanel(); clearTypeFilter();
+    }
+    return;
+  }
+  if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'f' || e.key === 'F') fitView();
+  if (e.key === '+' || e.key === '=') svg.transition().duration(150).call(zoomBehavior.scaleBy, 1.3);
+  if (e.key === '-') svg.transition().duration(150).call(zoomBehavior.scaleBy, 1/1.3);
+  if (e.key === '/') {
+    e.preventDefault();
+    const si = document.getElementById('search-input');
+    if (si && !si.disabled) si.focus();
+    return;
+  }
+  if (e.key === 's' || e.key === 'S') toggleStatsPanel();
+  // 方向键平移画布（与 #canvas 的 aria-label 描述一致）
+  const PAN = 60;
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); svg.call(zoomBehavior.translateBy,  PAN, 0); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); svg.call(zoomBehavior.translateBy, -PAN, 0); }
+  if (e.key === 'ArrowUp')    { e.preventDefault(); svg.call(zoomBehavior.translateBy, 0,  PAN); }
+  if (e.key === 'ArrowDown')  { e.preventDefault(); svg.call(zoomBehavior.translateBy, 0, -PAN); }
+});
+
+// Window resize
+window.addEventListener('resize', () => { _svgSizeCache = null; updateMinimapViewport(); });
+
+// ──── STATISTICS ANALYSIS ─────────────────────────────────────────────
+const COMP_KEYS_EXTRA = ['add','sub','mul','div','fma','exp','log','pow','sqrt','trig','hyperbolic','logic','round','sign','rcp'];
+const MEM_STACK_KEYS = ['read_act', 'read_weight', 'write_act'];  // MAC components
+// Charts use the current node theme for consistency.
+// CHART_PALETTE returns a 10-color array derived from the active theme.
+// MEM_COLORS maps MAC stack components to theme categories (read=blue,
+// weight=vermillion/orange, write=green) — semantic, theme-aware.
+function getChartPalette() { return themePalette(); }
+function getMemColors() {
+  const t = getTheme();
+  return { read_act: t.elementwise.border, read_weight: t.reduction.border, write_act: t.dot_product.border };
+}
+
+// Compact format for stats charts/KPIs (K/M/B suffixes, large structural numbers).
+// NOTE: not named fmtNum — the sidebar fmtNum (line ~1234) handles tiny values
+// (e.g. cost seconds) with scientific notation; a duplicate declaration here
+// would silently override it and round costs to 0.
+function fmtNumCompact(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return Math.round(n).toString();
+}
+// Compact scientific notation for axis ticks (e.g. 1.2e+3)
+function fmtSci(n) {
+  if (n === 0) return '0';
+  if (Math.abs(n) < 1e3) return d3.format('~s')(n);
+  return d3.format('.1e')(n).replace('e+', 'e');
+}
+
+// ── Compute stats: Part 1 (by node type) + Part 2 (by operation type) ──
+// Uses pre-computed stats from Python (window.__GRAPH_STATS__) if available;
+// otherwise falls back to computing from the embedded graph data.
+function computeGraphStats() {
+  if (activeEmbeddedStats) return activeEmbeddedStats;
+  if (!currentGraph) return null;
+  const typeAgg = {};      // by node type: count, flops, mac, read_act, read_weight, write_act
+  const opAgg = {};        // by operation: count (nodes), ops (total instances)
+
+  currentGraph.nodes().forEach(nId => {
+    const n = currentGraph.node(nId);
+    const type = n.data.op_type || 'Unknown';
+    const comp = n.data.feat_computation_info || {};
+    const mem  = n.data.feat_memory_info || {};
+
+    // Part 1: aggregate by node type
+    if (!typeAgg[type]) {
+      typeAgg[type] = { count: 0, flops: 0, mac: 0,
+                        read_act: 0, read_weight: 0, write_act: 0 };
+    }
+    const t = typeAgg[type];
+    t.count++;
+    t.flops          += comp.flops          || 0;
+    t.read_act       += mem.read_act        || 0;
+    t.read_weight    += mem.read_weight     || 0;
+    t.write_act      += mem.write_act       || 0;
+    t.mac = t.read_act + t.read_weight + t.write_act;
+
+    // Part 2: aggregate by operation type (comp_keys_extra)
+    COMP_KEYS_EXTRA.forEach(op => {
+      const v = comp[op] || 0;
+      if (v > 0) {
+        if (!opAgg[op]) opAgg[op] = { count: 0, ops: 0 };
+        opAgg[op].count++;
+        opAgg[op].ops += v;
+      }
+    });
+  });
+
+  const typeAggArr = Object.entries(typeAgg).map(([type, v]) => ({ type, ...v }))
+    .sort((a, b) => b.flops - a.flops);
+
+  const opAggArr = Object.entries(opAgg).map(([op, v]) => ({ op, ...v }))
+    .sort((a, b) => b.ops - a.ops);
+
+  return { typeAgg: typeAggArr, opAgg: opAggArr };
+}
+
+// Tooltip helper
+function tip() { return d3.select('#d3-tooltip'); }
+function showTip(html, event) {
+  const t = tip();
+  t.html(html).style('display', 'block')
+   .style('left', (event.clientX + 12) + 'px')
+   .style('top',  (event.clientY + 12) + 'px');
+}
+function hideTip() { tip().style('display', 'none'); }
+
+// Shared helper: create an SVG chart frame with margins
+function chartFrame(container, margin, innerW, innerH) {
+  const svg = container.append('svg')
+    .attr('width', innerW + margin.left + margin.right)
+    .attr('height', innerH + margin.top + margin.bottom);
+  return svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+}
+
+// Shared helper: value labels at bar ends
+function barLabels(g, data, x, y, valFn) {
+  g.selectAll('.vl').data(data).join('text').attr('class','vl')
+    .attr('x', d => x(valFn(d)) + 4).attr('y', d => y(d.type || d.op || d.key) + y.bandwidth()/2)
+    .attr('dy','0.35em').style('font-size','10px').style('font-family','var(--mono)')
+    .style('fill','#6b7280').text(d => fmtNumCompact(valFn(d)));
+}
+
+// ── Part 1, Chart 1: Horizontal bar — flops by type ──
+function renderFlopsByType(typeAgg) {
+  const container = d3.select('#chart-flops-by-type');
+  container.selectAll('*').remove();
+  const data = typeAgg.filter(d => d.flops > 0).slice(0, 15);
+  if (!data.length) { container.append('div').attr('class','chart-empty').text('No FLOPs data'); return; }
+
+  const margin = { top: 6, right: 56, bottom: 26, left: 80 };
+  const cw = container.node().clientWidth;
+  const innerW = Math.max(cw - margin.left - margin.right, 200);
+  const innerH = Math.max(data.length * 22 + 4, 120);
+  const g = chartFrame(container, margin, innerW, innerH);
+
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.flops)]).range([0, innerW]).nice();
+  const y = d3.scaleBand().domain(data.map(d => d.type)).range([0, innerH]).padding(0.25);
+
+  // X-axis gridlines (behind bars) for scientific readability
+  g.append('g').attr('class','d3-grid')
+    .call(d3.axisBottom(x).ticks(5).tickSize(innerH).tickFormat(''));
+
+  g.selectAll('rect').data(data).join('rect').attr('class','d3-bar')
+    .attr('x', 0).attr('y', d => y(d.type))
+    .attr('width', 0).attr('height', y.bandwidth())
+    .attr('fill', d => opTypeColor(d.type)).attr('rx', 3)
+    .style('cursor', 'pointer')
+    .style('opacity', d => typeFilter && d.type !== typeFilter ? 0.15 : 1)
+    .style('stroke', d => d.type === typeFilter ? 'var(--text)' : 'none')
+    .style('stroke-width', d => d.type === typeFilter ? 2.5 : 0)
+    .style('stroke-linejoin', 'round')
+    .on('mousemove', (e, d) => showTip(`<b>${esc(d.type)}</b><br>${prettyLabel('flops')}: ${d.flops.toLocaleString()}<br>Count: ${d.count}<br><i>${d.type === typeFilter ? 'click again to clear' : 'click to filter'}</i>`, e))
+    .on('mouseleave', hideTip)
+    .on('click', (e, d) => toggleTypeFilter(d.type))
+    .transition().duration(700).delay((d,i)=>i*45).ease(d3.easeCubicOut)
+    .attr('width', d => x(d.flops));
+
+  barLabels(g, data, x, y, d => d.flops);
+  g.append('g').attr('class','d3-axis').attr('transform',`translate(0,${innerH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(fmtSci));
+  g.append('g').attr('class','d3-axis').call(d3.axisLeft(y));
+}
+
+// ── Part 1, Chart 3: Stacked horizontal bar — MAC breakdown by type ──
+function renderMacByType(typeAgg) {
+  const container = d3.select('#chart-mac-by-type');
+  container.selectAll('*').remove();
+  const data = typeAgg.filter(d => d.mac > 0).slice(0, 15);
+  if (!data.length) { container.append('div').attr('class','chart-empty').text('No MAC data'); return; }
+
+  const margin = { top: 6, right: 56, bottom: 26, left: 80 };
+  const cw = container.node().clientWidth;
+  const innerW = Math.max(cw - margin.left - margin.right, 200);
+  const innerH = Math.max(data.length * 22 + 4, 120);
+  const g = chartFrame(container, margin, innerW, innerH);
+
+  const stack = d3.stack().keys(MEM_STACK_KEYS);
+  const stacked = stack(data);
+  const maxVal = d3.max(stacked, layer => d3.max(layer, d => d[1])) || 1;
+
+  const x = d3.scaleLinear().domain([0, maxVal]).range([0, innerW]).nice();
+  const y = d3.scaleBand().domain(data.map(d => d.type)).range([0, innerH]).padding(0.25);
+  const color = k => getMemColors()[k];
+
+  // X-axis gridlines (behind bars)
+  g.append('g').attr('class','d3-grid')
+    .call(d3.axisBottom(x).ticks(5).tickSize(innerH).tickFormat(''));
+
+  g.selectAll('g.layer').data(stacked).join('g').attr('class','layer')
+    .attr('fill', d => color(d.key))
+    .selectAll('rect').data(d => d).join('rect')
+    .attr('x', 0).attr('y', (d,i) => y(data[i].type))
+    .attr('width', 0).attr('height', y.bandwidth())
+    .style('cursor','pointer')
+    .style('opacity', (d,i) => typeFilter && data[i].type !== typeFilter ? 0.15 : 1)
+    .style('stroke', (d,i) => data[i].type === typeFilter ? 'var(--text)' : 'none')
+    .style('stroke-width', (d,i) => data[i].type === typeFilter ? 2.5 : 0)
+    .style('stroke-linejoin', 'round')
+    .on('mousemove', function(e,d) {
+      const layerKey = d3.select(this.parentNode).datum().key;
+      const idx = d3.select(this.parentNode).datum().indexOf(d);
+      const val = d[1] - d[0];
+      showTip(`<b>${esc(data[idx].type)}</b><br>${prettyLabel(layerKey)}: ${val.toLocaleString()}<br>MAC total: ${data[idx].mac.toLocaleString()}<br><i>${data[idx].type === typeFilter ? 'click again to clear' : 'click to filter'}</i>`, e);
+    })
+    .on('mouseleave', hideTip)
+    .on('click', function(e, d) {
+      const idx = d3.select(this.parentNode).datum().indexOf(d);
+      if (idx >= 0) toggleTypeFilter(data[idx].type);
+    })
+    .transition().duration(700).delay((d,i)=>i*45).ease(d3.easeCubicOut)
+    .attr('x', d => x(d[0]))
+    .attr('width', d => Math.max(x(d[1]) - x(d[0]), 0));
+
+  g.append('g').attr('class','d3-axis').attr('transform',`translate(0,${innerH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(fmtSci));
+  g.append('g').attr('class','d3-axis').call(d3.axisLeft(y));
+
+  const legend = container.append('div').attr('class','chart-legend');
+  MEM_STACK_KEYS.forEach(k => {
+    legend.append('div').attr('class','chart-legend-item')
+      .html(`<span class="chart-legend-swatch" style="background:${color(k)}"></span>${prettyLabel(k)}`);
+  });
+}
+
+// ── Part 1, Chart 4: Donut — node count distribution by type ──
+function renderTypeDonut(typeAgg) {
+  const container = d3.select('#chart-type-donut');
+  container.selectAll('*').remove();
+  const data = typeAgg.filter(d => d.count > 0);
+  if (!data.length) { container.append('div').attr('class','chart-empty').text('No data'); return; }
+
+  const cw = container.node().clientWidth;
+  const size = Math.min(cw, 240);
+  const radius = size / 2;
+  const svg = container.append('svg')
+    .attr('width', size).attr('height', size + 20);
+  const g = svg.append('g').attr('transform', `translate(${radius},${radius})`);
+
+  const color = d3.scaleOrdinal().domain(data.map(d => d.type)).range(getChartPalette());
+  const pie = d3.pie().value(d => d.count).sort(null);
+  const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius * 0.85).padAngle(0.01);
+  const arcHover = d3.arc().innerRadius(radius * 0.55).outerRadius(radius * 0.92).padAngle(0.01);
+
+  g.selectAll('path').data(pie(data)).join('path')
+    .attr('fill', d => color(d.data.type)).attr('d', arc)
+    .style('cursor','pointer')
+    .style('opacity', 0)
+    .on('mouseenter', function(e, d) { d3.select(this).transition().duration(120).attr('d', arcHover); })
+    .on('mousemove', (e, d) => showTip(`<b>${esc(d.data.type)}</b><br>${d.data.count} nodes (${(d.data.count / data.length * 100).toFixed(1)}%)<br><i>${d.data.type === typeFilter ? 'click again to clear' : 'click to filter'}</i>`, e))
+    .on('mouseleave', function() { d3.select(this).transition().duration(120).attr('d', arc); hideTip(); })
+    .on('click', (e, d) => toggleTypeFilter(d.data.type))
+    .transition().duration(650).delay((d,i)=>i*40)
+    .style('opacity', 1)
+    .attrTween('d', d => {
+      const interp = d3.interpolate(d.startAngle, d.endAngle);
+      return t => { const a = Object.assign({}, d, { endAngle: interp(t) }); return arc(a); };
+    })
+    .selection()
+    .style('opacity', d => typeFilter && d.data.type !== typeFilter ? 0.15 : 1)
+    .style('stroke', d => d.data.type === typeFilter ? 'var(--text)' : 'none')
+    .style('stroke-width', d => d.data.type === typeFilter ? 3 : 0);
+
+  g.append('text').attr('text-anchor','middle').attr('dy','-0.2em')
+    .style('font-family','var(--mono)').style('font-size','10px').style('fill','var(--sub)')
+    .text('Nodes');
+  g.append('text').attr('text-anchor','middle').attr('dy','1.1em')
+    .style('font-family','var(--mono)').style('font-size','14px').style('font-weight','700').style('fill','var(--text)')
+    .text(data.reduce((s,d) => s + d.count, 0));
+
+  const legend = container.append('div').attr('class','chart-legend');
+  data.slice(0, 10).forEach(d => {
+    const isSel = d.type === typeFilter;
+    legend.append('div').attr('class','chart-legend-item')
+      .style('cursor','pointer')
+      .style('opacity', typeFilter && d.type !== typeFilter ? 0.4 : 1)
+      .style('border-radius', '4px')
+      .style('padding', isSel ? '1px 4px' : '0')
+      .style('background', isSel ? 'var(--accent-soft)' : 'transparent')
+      .style('box-shadow', isSel ? 'inset 0 0 0 1px var(--accent-soft-border)' : 'none')
+      .attr('title', isSel ? 'Click to clear filter' : 'Click to filter')
+      .on('click', () => toggleTypeFilter(d.type))
+      .html(`<span class="chart-legend-swatch" style="background:${color(d.type)}"></span>${esc(d.type)}`);
+  });
+}
+
+// ── Part 2, Chart 1: Horizontal bar — op instances by operation ──
+function renderOpBar(opAgg) {
+  const container = d3.select('#chart-op-bar');
+  container.selectAll('*').remove();
+  const data = opAgg.slice(0, 15);
+  if (!data.length) { container.append('div').attr('class','chart-empty').text('No operation data'); return; }
+
+  const margin = { top: 6, right: 56, bottom: 26, left: 64 };
+  const cw = container.node().clientWidth;
+  const innerW = Math.max(cw - margin.left - margin.right, 200);
+  const innerH = Math.max(data.length * 22 + 4, 120);
+  const g = chartFrame(container, margin, innerW, innerH);
+
+  const opLbl = d => prettyLabel(d.op);
+  const x = d3.scaleLinear().domain([0, d3.max(data, d => d.ops)]).range([0, innerW]).nice();
+  const y = d3.scaleBand().domain(data.map(opLbl)).range([0, innerH]).padding(0.25);
+  const color = d3.scaleOrdinal().domain(data.map(d => d.op)).range(getChartPalette());
+
+  // X-axis gridlines (behind bars)
+  g.append('g').attr('class','d3-grid')
+    .call(d3.axisBottom(x).ticks(5).tickSize(innerH).tickFormat(''));
+
+  g.selectAll('rect').data(data).join('rect').attr('class','d3-bar')
+    .attr('x', 0).attr('y', d => y(opLbl(d)))
+    .attr('width', 0).attr('height', y.bandwidth())
+    .attr('fill', d => color(d.op)).attr('rx', 3)
+    .style('cursor','pointer')
+    .on('mousemove', (e,d) => showTip(`<b>${opLbl(d)}</b><br>Ops: ${d.ops.toLocaleString()}<br>Nodes: ${d.count}`, e))
+    .on('mouseleave', hideTip)
+    .transition().duration(700).delay((d,i)=>i*45).ease(d3.easeCubicOut)
+    .attr('width', d => x(d.ops));
+
+  g.selectAll('.vl').data(data).join('text').attr('class','vl')
+    .attr('x', d => x(d.ops) + 4).attr('y', d => y(opLbl(d)) + y.bandwidth()/2)
+    .attr('dy','0.35em').style('font-size','10px').style('font-family','var(--mono)')
+    .style('fill','#6b7280').text(d => fmtNumCompact(d.ops));
+
+  g.append('g').attr('class','d3-axis').attr('transform',`translate(0,${innerH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(fmtSci));
+  g.append('g').attr('class','d3-axis').call(d3.axisLeft(y));
+}
+
+// ── Part 2, Chart 2: Donut — operation count distribution ──
+function renderOpDonut(opAgg) {
+  const container = d3.select('#chart-op-donut');
+  container.selectAll('*').remove();
+  const data = opAgg.filter(d => d.count > 0);
+  if (!data.length) { container.append('div').attr('class','chart-empty').text('No operation data'); return; }
+
+  const cw = container.node().clientWidth;
+  const size = Math.min(cw, 240);
+  const radius = size / 2;
+  const svg = container.append('svg')
+    .attr('width', size).attr('height', size + 20);
+  const g = svg.append('g').attr('transform', `translate(${radius},${radius})`);
+
+  const color = d3.scaleOrdinal().domain(data.map(d => d.op)).range(getChartPalette());
+  const pie = d3.pie().value(d => d.count).sort(null);
+  const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius * 0.85).padAngle(0.01);
+  const arcHover = d3.arc().innerRadius(radius * 0.55).outerRadius(radius * 0.92).padAngle(0.01);
+  const total = data.reduce((s,d) => s + d.count, 0);
+
+  g.selectAll('path').data(pie(data)).join('path')
+    .attr('fill', d => color(d.data.op)).attr('d', arc)
+    .style('cursor','pointer')
+    .style('opacity', 0)
+    .on('mouseenter', function(e, d) { d3.select(this).transition().duration(120).attr('d', arcHover); })
+    .on('mousemove', (e, d) => showTip(`<b>${prettyLabel(d.data.op)}</b><br>${d.data.count} ops (${(d.data.count / total * 100).toFixed(1)}%)`, e))
+    .on('mouseleave', function() { d3.select(this).transition().duration(120).attr('d', arc); hideTip(); })
+    .transition().duration(650).delay((d,i)=>i*40)
+    .style('opacity', 1)
+    .attrTween('d', d => {
+      const interp = d3.interpolate(d.startAngle, d.endAngle);
+      return t => { const a = Object.assign({}, d, { endAngle: interp(t) }); return arc(a); };
+    });
+
+  g.append('text').attr('text-anchor','middle').attr('dy','-0.2em')
+    .style('font-family','var(--mono)').style('font-size','10px').style('fill','var(--sub)')
+    .text('Ops');
+  g.append('text').attr('text-anchor','middle').attr('dy','1.1em')
+    .style('font-family','var(--mono)').style('font-size','14px').style('font-weight','700').style('fill','var(--text)')
+    .text(total);
+
+  const legend = container.append('div').attr('class','chart-legend');
+  data.slice(0, 10).forEach(d => {
+    legend.append('div').attr('class','chart-legend-item')
+      .html(`<span class="chart-legend-swatch" style="background:${color(d.op)}"></span>${prettyLabel(d.op)}`);
+  });
+}
+
+function renderAllStats(stats) {
+  renderFlopsByType(stats.typeAgg);
+  renderMacByType(stats.typeAgg);
+  renderTypeDonut(stats.typeAgg);
+  renderOpBar(stats.opAgg);
+  renderOpDonut(stats.opAgg);
+}
+
+// Animated KPI count-up
+function animateKPI(el, target, formatter) {
+  if (!el) return;
+  const dur = 800, start = performance.now();
+  const step = now => {
+    const t = Math.min((now - start) / dur, 1);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = formatter(target * eased);
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function openStatsPanel() {
+  const stats = computeGraphStats();
+  if (!stats) { showToast('No graph loaded. Load a JSON file first.', 'error'); return; }
+  currentStats = stats;
+  const totalNodes = stats.typeAgg.reduce((s, d) => s + d.count, 0);
+  const totalFlops = stats.typeAgg.reduce((s, d) => s + d.flops, 0);
+  const totalMac   = stats.typeAgg.reduce((s, d) => s + d.mac, 0);
+  const totalTypes = stats.typeAgg.length;
+
+  // KPI cards (animated count-up)
+  animateKPI(document.getElementById('kpi-nodes'), totalNodes, v => Math.round(v).toLocaleString());
+  animateKPI(document.getElementById('kpi-types'), totalTypes, v => Math.round(v).toLocaleString());
+  animateKPI(document.getElementById('kpi-flops'), totalFlops, v => fmtNumCompact(v));
+  animateKPI(document.getElementById('kpi-mac'),   totalMac,   v => fmtNumCompact(v));
+
+  document.getElementById('stats-summary-text').textContent =
+    `${totalNodes} nodes  |  ${totalTypes} types  |  ${fmtNumCompact(totalFlops)} FLOPs  |  ${fmtNumCompact(totalMac)} MAC`;
+  const panel = document.getElementById('stats-panel');
+  panel.classList.add('open');
+  document.getElementById('stats-btn').classList.add('active');
+  // Defer chart rendering until the panel's width transition ends, otherwise
+  // container.clientWidth is still 0 → donut/bar charts compute size=0 and
+  // render invisibly.
+  scheduleStatsRender(stats);
+  scheduleAdaptiveFit();
+}
+
+// Render charts after the panel transition finishes (clientWidth is final then)
+let _statsRenderTimer = null;
+function scheduleStatsRender(stats) {
+  clearTimeout(_statsRenderTimer);
+  _statsRenderTimer = setTimeout(() => renderAllStats(stats), 300);
+}
+
+function closeStatsPanel() {
+  document.getElementById('stats-panel').classList.remove('open');
+  document.getElementById('stats-btn').classList.remove('active');
+  scheduleAdaptiveFit();
+}
+
+// Debounced adaptive-fit that fires after the panel width transition ends.
+// We listen for transitionend on the panels themselves (most reliable), with
+// a 320ms timeout fallback in case the event doesn't fire (e.g. display:none).
+let _fitTimer = null;
+function scheduleAdaptiveFit() {
+  clearTimeout(_fitTimer);
+  _fitTimer = setTimeout(() => adaptiveFit(), 320);
+}
+// Wire transitionend listeners once
+(function setupPanelTransitionListeners() {
+  function onTrEnd(e) {
+    // Only react to width transitions (avoid firing on every nested property)
+    if (e.propertyName !== 'width' && e.propertyName !== 'min-width') return;
+    clearTimeout(_fitTimer);
+    adaptiveFit();
+    // Also render stats charts now that the panel width is final
+    if (currentStats) {
+      clearTimeout(_statsRenderTimer);
+      renderAllStats(currentStats);
+    }
+  }
+  const sb = document.getElementById('sidebar');
+  const sp = document.getElementById('stats-panel');
+  if (sb) sb.addEventListener('transitionend', onTrEnd);
+  if (sp) sp.addEventListener('transitionend', onTrEnd);
+})();
+
+// ──── NODE SEARCH / FILTER
+let searchMatches = [];     // ordered list of matched node IDs
+let searchIdx = -1;         // current match index
+
+function clearNodeFilter() {
+  searchActive = false;
+  searchMatches = [];
+  searchIdx = -1;
+  applyNodeDimming();
+  d3.selectAll('.node').classed('search-current', false);
+  const sc = document.getElementById('search-count');
+  if (sc) sc.style.display = 'none';
+  const nav = document.getElementById('search-nav');
+  if (nav) nav.style.display = 'none';
+  updateSearchChip();
+}
+
+// Unified dimming: a node stays visible only if it passes the active
+// criterion. The text search and the op_type filter are mutually exclusive in
+// the UI (see toggleTypeFilter / filterNodes), so at most one is ever active;
+// the AND below is just a harmless fallback if both were somehow set.
+function applyNodeDimming() {
+  if (!currentGraph) return;
+  const searchSet = searchActive ? new Set(searchMatches) : null;
+  d3.selectAll('.node').each(function() {
+    const el = d3.select(this);
+    const nId = el.attr('data-id');
+    const node = currentGraph.node(nId);
+    const okType = !typeFilter || (node && node.data.op_type === typeFilter);
+    const hit = okType && (!searchSet || searchSet.has(nId));
+    el.style('opacity', hit ? 1 : 0.12).classed('filtered-out', !hit);
+  });
+  d3.selectAll('.edge').each(function() {
+    const el = d3.select(this);
+    const nv = currentGraph.node(el.attr('data-v'));
+    const nw = currentGraph.node(el.attr('data-w'));
+    const okType = !typeFilter || (nv && nv.data.op_type === typeFilter
+      && nw && nw.data.op_type === typeFilter);
+    const hit = okType && (!searchSet
+      || (searchSet.has(el.attr('data-v')) && searchSet.has(el.attr('data-w'))));
+    el.style('opacity', hit ? 1 : 0.08);
+  });
+}
+
+// ── Search predicate: substring (default) / /regex/ / metric threshold ──
+// Examples: "conv", "/Gemm|Conv/", "mac>1M", "flops>=100k", "serial_cost_hw_rtx3090<1m"
+function nodeMetricByKey(data, key) {
+  if (key === 'flops' || key === 'fma') return (data.feat_computation_info || {})[key];
+  if (key === 'mac') return (data.feat_memory_info || {}).mac;
+  return (data.feat_cost_info || {})[key];
+}
+
+function parseSearchPredicate(q) {
+  // /regex/
+  if (q.length > 2 && q.startsWith('/') && q.endsWith('/')) {
+    try {
+      const re = new RegExp(q.slice(1, -1), 'i');
+      return (nId, d) => re.test(nId) || re.test(d.op_type || '');
+    } catch (err) { return null; }
+  }
+  // metric>1M / metric>=100k / metric<2g
+  const m = q.match(/^([a-z_][a-z0-9_]*)\s*(>=|<=|>|<)\s*([\d.]+)\s*([kmg]?)$/i);
+  if (m) {
+    const key = m[1], op = m[2];
+    const val = parseFloat(m[3]) * ({ k: 1e3, m: 1e6, g: 1e9 }[m[4].toLowerCase()] || 1);
+    return (nId, d) => {
+      const v = nodeMetricByKey(d, key);
+      if (v === undefined || v === null) return false;
+      switch (op) {
+        case '>':  return v > val;
+        case '<':  return v < val;
+        case '>=': return v >= val;
+        default:   return v <= val;
+      }
+    };
+  }
+  // default: substring on id / op_type
+  const lq = q.toLowerCase();
+  return (nId, d) => nId.toLowerCase().includes(lq) || (d.op_type || '').toLowerCase().includes(lq);
+}
+
+function filterNodes(query) {
+  if (!currentGraph) return;
+  const q = query.trim();
+  if (!q) { clearNodeFilter(); return; }
+  if (typeFilter) {                      // mutual exclusivity: search wins
+    typeFilter = null;
+    updateTypeFilterChip();
+    if (currentStats) renderAllStats(currentStats);
+  }
+  const pred = parseSearchPredicate(q);
+  searchMatches = [];
+  searchActive = !!pred;
+  if (pred) {
+    // Iterate in dagre's natural (topological) order for predictable navigation
+    currentGraph.nodes().forEach(nId => {
+      if (pred(nId, currentGraph.node(nId).data)) searchMatches.push(nId);
+    });
+  }
+  applyNodeDimming();
+  const total = currentGraph.nodes().length;
+  const sc = document.getElementById('search-count');
+  if (sc) { sc.style.display = ''; sc.textContent = `${searchMatches.length}/${total}`; }
+  const nav = document.getElementById('search-nav');
+  if (nav) nav.style.display = searchMatches.length ? 'flex' : 'none';
+  if (searchMatches.length) gotoMatch(0); else searchIdx = -1;
+  updateSearchChip();
+}
+
+// ──── OP_TYPE FILTER (click a bar / donut slice in the stats charts)
+// Type filter and text search are mutually exclusive: activating one clears
+// the other so it is always obvious which criterion is dimming the graph.
+function clearSearchInput() {
+  const si = document.getElementById('search-input');
+  if (si && si.value) si.value = '';
+  clearNodeFilter();
+}
+
+function toggleTypeFilter(type) {
+  const next = typeFilter === type ? null : type;
+  if (next) clearSearchInput();          // mutual exclusivity: filter wins
+  typeFilter = next;
+  applyNodeDimming();
+  updateTypeFilterChip();
+  if (currentStats) renderAllStats(currentStats);
+}
+
+function clearTypeFilter() {
+  if (!typeFilter) return;
+  typeFilter = null;
+  applyNodeDimming();
+  updateTypeFilterChip();
+  if (currentStats) renderAllStats(currentStats);
+}
+
+function updateTypeFilterChip() {
+  const chip = document.getElementById('sb-filter');
+  if (!chip) return;
+  chip.style.display = typeFilter ? '' : 'none';
+  if (typeFilter) {
+    document.getElementById('sb-filter-val').textContent = typeFilter;
+    chip.title = `Filtering nodes by op_type "${typeFilter}" — click to clear`;
+  }
+}
+document.getElementById('sb-filter').addEventListener('click', clearTypeFilter);
+
+// Mirror of updateTypeFilterChip for the text search, so the status bar always
+// shows which criterion (filter or search) is currently dimming the graph.
+function updateSearchChip() {
+  const chip = document.getElementById('sb-search');
+  if (!chip) return;
+  const si = document.getElementById('search-input');
+  const q = si ? si.value.trim() : '';
+  const on = searchActive && q;
+  chip.style.display = on ? '' : 'none';
+  if (on) {
+    document.getElementById('sb-search-val').textContent = q;
+    chip.title = `Searching nodes for "${q}" (${searchMatches.length} matches) — click to clear`;
+  }
+}
+document.getElementById('sb-search').addEventListener('click', clearSearchInput);
+
+// Pan/zoom to center a specific node in the viewport
+function centerNode(nId, smooth = true) {
+  if (!currentGraph || !nId) return;
+  const node = currentGraph.node(nId);
+  if (!node) return;
+  const svgEl = document.getElementById('canvas');
+  const svgW = svgEl.clientWidth || 800;
+  const svgH = svgEl.clientHeight || 600;
+  // Keep current scale, but ensure a minimum so the node is readable
+  const k = Math.max(currentTransform.k, 0.6);
+  const tx = svgW / 2 - node.x * k;
+  const ty = svgH / 2 - node.y * k;
+  const t = d3.zoomIdentity.translate(tx, ty).scale(k);
+  if (smooth) svg.transition().duration(350).call(zoomBehavior.transform, t);
+  else svg.call(zoomBehavior.transform, t);
+}
+
+function gotoMatch(idx) {
+  if (!searchMatches.length) return;
+  // Wrap around
+  searchIdx = (idx + searchMatches.length) % searchMatches.length;
+  const nId = searchMatches[searchIdx];
+  d3.selectAll('.node').classed('search-current', false);
+  d3.select(`.node[data-id="${CSS.escape(nId)}"]`).classed('search-current', true);
+  centerNode(nId);
+  const sc = document.getElementById('search-count');
+  if (sc) sc.textContent = `${searchIdx + 1}/${searchMatches.length}`;
+}
+
+function searchNext() { if (searchMatches.length) gotoMatch(searchIdx + 1); }
+function searchPrev() { if (searchMatches.length) gotoMatch(searchIdx - 1); }
+
+// ──── EXPORT
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Compute full bounding box of the dagre graph (nodes + edge points)
+function computeGraphBBox() {
+  if (!currentGraph) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  currentGraph.nodes().forEach(nId => {
+    const n = currentGraph.node(nId);
+    minX = Math.min(minX, n.x - n.width / 2);
+    minY = Math.min(minY, n.y - n.height / 2);
+    maxX = Math.max(maxX, n.x + n.width / 2);
+    maxY = Math.max(maxY, n.y + n.height / 2);
+  });
+  currentGraph.edges().forEach(eKey => {
+    const edge = currentGraph.edge(eKey);
+    (edge.points || []).forEach(p => {
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+    });
+  });
+  if (!isFinite(minX)) return null;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+// Build a self-contained SVG string for export.
+// Strategy: clone the live SVG, copy computed styles to attributes (so the
+// result renders correctly even without our CSS), bake text baselines via
+// dy="0.35em" (since dominant-baseline is poorly supported in rasterizers),
+// and bake rx/ry as attributes (CSS rx/ry is SVG2-only). This produces a
+// portable, paper-quality SVG that also rasterizes cleanly to PNG.
+function buildExportSVG() {
+  if (!currentGraph) return null;
+  const bbox = computeGraphBBox();
+  if (!bbox) return null;
+  const pad = 40;
+  const w = bbox.width + pad * 2;
+  const h = bbox.height + pad * 2;
+
+  const svgEl = document.getElementById('canvas');
+  const clone = svgEl.cloneNode(true);
+  const sceneEl = clone.querySelector('#scene');
+  if (sceneEl) sceneEl.setAttribute('transform', `translate(${-bbox.x + pad},${-bbox.y + pad})`);
+
+  clone.setAttribute('width', w);
+  clone.setAttribute('height', h);
+  clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+
+  // White background as first child
+  const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bg.setAttribute('width', w); bg.setAttribute('height', h);
+  bg.setAttribute('fill', '#ffffff');
+  clone.insertBefore(bg, clone.firstChild);
+
+  // Embed minimal styles + bake text baselines and rounded corners as attributes
+  // (dominant-baseline and CSS rx/ry are not universally supported by
+  //  rasterizers / standalone viewers).
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleEl.setAttribute('type', 'text/css');
+  styleEl.textContent = `
+    .node .n-body { stroke-width: 1; }
+    .edge .e-path { fill: none; stroke-width: 1.3; }
+    .e-label { fill: #475569; font-size: 9px;
+              font-family: 'JetBrains Mono','SF Mono','Consolas',monospace;
+              text-anchor: middle; }
+    .n-type-text { fill: #1e293b; font-size: 11px; font-weight: 700;
+                   font-family: 'JetBrains Mono','SF Mono','Consolas',monospace;
+                   text-anchor: middle; letter-spacing: .2px; }
+    text { font-family: 'JetBrains Mono','SF Mono','Consolas',monospace; }
+  `;
+  clone.insertBefore(styleEl, bg);
+
+  // Bake live computed styles → attributes for each node/edge so colors survive
+  // outside our app's CSS, and fix text baselines + rounded corners.
+  // The accent bar (rect[clip-path]) relies on a clip-path id that must
+  // survive serialization; we re-set its fill from the theme to be safe.
+  clone.querySelectorAll('.node').forEach(ng => {
+    const id = ng.getAttribute('data-id');
+    const node = currentGraph.node(id);
+    if (!node) return;
+    const pal = getStyle(node.data.op_type);
+    const body = ng.querySelector('.n-body');
+    if (body) {
+      body.setAttribute('rx', '3');
+      body.setAttribute('ry', '3');
+      body.setAttribute('stroke', pal.border);
+      // Match the live mode's body fill (metric encoding when active) so
+      // PNG/SVG export stays consistent with the canvas
+      const mFill = metricFill(node.data);
+      if (nodeStyleMode === 'filled') {
+        body.setAttribute('fill', mFill || pal.border);
+      } else if (nodeStyleMode === 'minimal') {
+        body.setAttribute('fill', mFill || 'none');
+      } else { // topbar
+        body.setAttribute('fill', mFill || '#ffffff');
+      }
+    }
+    // Re-assert accent bar fill (already an attribute, but be safe)
+    ng.querySelectorAll('rect[clip-path]').forEach(r => r.setAttribute('fill', pal.border));
+    // Text color: white on filled (vibrant), dark otherwise
+    ng.querySelectorAll('text.n-type-text').forEach(t => {
+      t.setAttribute('dy', '0.35em');
+      t.setAttribute('fill', nodeStyleMode === 'filled' ? '#ffffff' : '#1e293b');
+    });
+  });
+  clone.querySelectorAll('.edge').forEach(eg => {
+    eg.querySelectorAll('.e-hit').forEach(h => h.remove());
+    const v = eg.getAttribute('data-v'), wId = eg.getAttribute('data-w');
+    const path = eg.querySelector('.e-path');
+    if (path) path.setAttribute('stroke', '#6b7280');
+    eg.querySelectorAll('text.e-label').forEach(t => {
+      t.setAttribute('dy', '0.35em');
+    });
+  });
+
+  const xml = new XMLSerializer().serializeToString(clone);
+  return { xml, width: w, height: h };
+}
+
+function exportGraphSVG() {
+  const out = buildExportSVG();
+  if (!out) { showToast('No graph loaded to export.', 'error'); return; }
+  downloadBlob(new Blob([out.xml], {type: 'image/svg+xml'}), 'modelperf-graph.svg');
+}
+
+// Export the raw graph data (same format accepted by "Load JSON")
+function exportGraphJSON() {
+  if (!currentRawGraph) { showToast('No graph loaded to export.', 'error'); return; }
+  downloadBlob(new Blob([JSON.stringify(currentRawGraph, null, 2)], {type:'application/json'}), 'modelperf-graph.json');
+}
+
+function exportGraphPNG() {
+  const out = buildExportSVG();
+  if (!out) { showToast('No graph loaded to export.', 'error'); return; }
+  // 限制画布边长和总像素，超大图建议保留矢量格式。
+  const scale = Math.min(2, 8192 / out.width, 8192 / out.height,
+    Math.sqrt(32 * 1024 * 1024 / (out.width * out.height)));
+  if (!Number.isFinite(scale) || scale < 0.1) {
+    showToast('Graph is too large for PNG. Export SVG instead.', 'error'); return;
+  }
+  const url = URL.createObjectURL(new Blob([out.xml], { type: 'image/svg+xml;charset=utf-8' }));
+  const img = new Image();
+  let released = false;
+  const release = () => { if (!released) { released = true; URL.revokeObjectURL(url); } };
+  const fail = () => { release(); showToast('PNG export failed. Export SVG instead.', 'error'); };
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.floor(out.width * scale));
+      canvas.height = Math.max(1, Math.floor(out.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas unavailable');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(b => { if (b) downloadBlob(b, 'modelperf-graph.png'); else fail(); }, 'image/png');
+    } catch (err) { fail(); }
+    finally { release(); }
+  };
+  img.onerror = () => { fail(); };
+  img.src = url;
+}
+
+function exportStatsJSON() {
+  if (!currentStats) { showToast('Open the Statistics panel first to compute stats.', 'error'); return; }
+  const data = {
+    generated: new Date().toISOString(),
+    summary: { totalNodes: currentStats.typeAgg.reduce((s,d)=>s+d.count,0),
+               totalFLOPs: currentStats.typeAgg.reduce((s,d)=>s+d.flops,0),
+               totalMAC:   currentStats.typeAgg.reduce((s,d)=>s+d.mac,0) },
+    byNodeType: currentStats.typeAgg,
+    byOperation: currentStats.opAgg
+  };
+  downloadBlob(new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}), 'modelperf-stats.json');
+}
+
+function exportStatsCSV() {
+  if (!currentStats) { showToast('Open the Statistics panel first to compute stats.', 'error'); return; }
+  const cols = ['name','count','flops','mac','read_act','read_weight','write_act'].map(prettyLabel);
+  const csv = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const rows = [];
+  rows.push(cols.map(csv).join(','));
+  currentStats.typeAgg.forEach(d => {
+    rows.push(['type:'+d.type, d.count, d.flops, d.mac, d.read_act, d.read_weight, d.write_act].map(csv).join(','));
+  });
+  currentStats.opAgg.forEach(d => {
+    rows.push(['op:'+prettyLabel(d.op), d.count, d.ops, '', '', '', ''].map(csv).join(','));
+  });
+  downloadBlob(new Blob([rows.join('\n')], {type:'text/csv'}), 'modelperf-stats.csv');
+}
+
+// ──── STATS TABLE VIEW
+function renderStatsTable() {
+  const wrap = document.getElementById('stats-table-wrap');
+  if (!wrap) return;
+  if (!currentStats) { wrap.innerHTML = '<div class="chart-empty">No stats data</div>'; return; }
+  const num = v => esc((v === undefined || v === null) ? '' : (typeof v === 'number' ? v.toLocaleString() : v));
+  const typeRows = currentStats.typeAgg.map(d => `<tr>
+      <td>${esc(d.type)}</td><td>${num(d.count)}</td><td>${num(d.flops)}</td>
+      <td>${num(d.mac)}</td><td>${num(d.read_act)}</td>
+      <td>${num(d.read_weight)}</td><td>${num(d.write_act)}</td></tr>`).join('');
+  const opRows = currentStats.opAgg.map(d => `<tr>
+      <td>${esc(prettyLabel(d.op))}</td><td>${num(d.count)}</td><td>${num(d.ops)}</td>
+      <td></td><td></td><td></td><td></td></tr>`).join('');
+  const tot = currentStats.typeAgg.reduce((s,d)=>({count:s.count+d.count, flops:s.flops+d.flops,
+    mac:s.mac+d.mac,
+    read_act:s.read_act+d.read_act, read_weight:s.read_weight+d.read_weight, write_act:s.write_act+d.write_act}),
+    {count:0,flops:0,mac:0,read_act:0,read_weight:0,write_act:0});
+  wrap.innerHTML = `<table class="stats-table">
+    <thead><tr><th>Name</th><th>Count</th><th>FLOPs</th>
+      <th>MAC</th><th>Read Activation</th><th>Read Weight</th><th>Write Activation</th></tr></thead>
+    <tbody>${typeRows}${opRows}</tbody>
+    <tfoot><tr><td>Total</td><td>${num(tot.count)}</td><td>${num(tot.flops)}</td>
+      <td>${num(tot.mac)}</td><td>${num(tot.read_act)}</td>
+      <td>${num(tot.read_weight)}</td><td>${num(tot.write_act)}</td></tr></tfoot>
+  </table>`;
+  const info = document.getElementById('table-info');
+  if (info) info.textContent = `${currentStats.typeAgg.length} types · ${currentStats.opAgg.length} operations`;
+}
+
+function toggleStatsPanel() {
+  const panel = document.getElementById('stats-panel');
+  if (panel.classList.contains('open')) closeStatsPanel();
+  else openStatsPanel();
+}
+
+document.getElementById('stats-btn').addEventListener('click', toggleStatsPanel);
+document.getElementById('sb-close-btn').addEventListener('click', closeSidebar);
+document.getElementById('stats-close-btn').addEventListener('click', closeStatsPanel);
+
+// ──── SEARCH WIRING
+let searchTimer = null;
+document.getElementById('search-input').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  const v = e.target.value;
+  searchTimer = setTimeout(() => filterNodes(v), 120);
+});
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (e.shiftKey) searchPrev(); else searchNext();
+  } else if (e.key === 'Escape') {
+    e.target.value = ''; clearNodeFilter(); e.target.blur();
+  }
+});
+document.getElementById('search-prev-btn').addEventListener('click', searchPrev);
+document.getElementById('search-next-btn').addEventListener('click', searchNext);
+
+// ──── DROPDOWN WIRING (export + collapsed style menu)
+const exportMenu = document.getElementById('export-menu');
+const styleMenu = document.getElementById('style-menu');
+function closeAllDropdowns(restoreFocus = false) {
+  const openMenu = document.querySelector('.t-dropdown-menu.open');
+  if (restoreFocus && openMenu) {
+    document.getElementById(openMenu.id === 'export-menu' ? 'export-btn' : 'style-btn').focus();
+  }
+  exportMenu.classList.remove('open');
+  styleMenu.classList.remove('open');
+  document.getElementById('export-btn').setAttribute('aria-expanded', 'false');
+  document.getElementById('style-btn').setAttribute('aria-expanded', 'false');
+}
+document.addEventListener('click', () => closeAllDropdowns());
+document.getElementById('export-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  closeOtherMenu(styleMenu, 'style-btn');
+  const open = exportMenu.classList.toggle('open');
+  document.getElementById('export-btn').setAttribute('aria-expanded', String(open));
+});
+exportMenu.addEventListener('click', e => {
+  const item = e.target.closest('[data-export]');
+  if (!item) return;
+  const kind = item.getAttribute('data-export');
+  exportMenu.classList.remove('open');
+  document.getElementById('export-btn').setAttribute('aria-expanded', 'false');
+  if (kind === 'svg')  exportGraphSVG();
+  if (kind === 'png')  exportGraphPNG();
+  if (kind === 'graph-json') exportGraphJSON();
+  if (kind === 'json') exportStatsJSON();
+  if (kind === 'csv')  exportStatsCSV();
+});
+// Style dropdown — collapsed Color Theme + Node Style selects
+document.getElementById('style-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  closeOtherMenu(exportMenu, 'export-btn');
+  const open = styleMenu.classList.toggle('open');
+  document.getElementById('style-btn').setAttribute('aria-expanded', String(open));
+});
+// Keep the menu open while interacting with the native selects inside it
+styleMenu.addEventListener('click', e => e.stopPropagation());
+function closeOtherMenu(other, button) {
+  other.classList.remove('open');
+  document.getElementById(button).setAttribute('aria-expanded', 'false');
+}
+
+// ──── STATS TAB WIRING
+document.querySelectorAll('.stats-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const view = tab.getAttribute('data-view');
+    document.querySelectorAll('.stats-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.stats-view').forEach(v => {
+      v.classList.toggle('active', v.id === 'view-' + view);
+    });
+    if (view === 'table') renderStatsTable();
+  });
+});
+document.getElementById('table-csv-btn').addEventListener('click', exportStatsCSV);
+
+// Start
+setupZoom();
+
+// Load graph: prefer embedded data (window.__GRAPH_DATA__), fall back to fetch
+function hideSplash() {
+  setTimeout(() => { const sp = document.getElementById('splash'); if (sp) sp.classList.add('hide'); }, 400);
+}
+(function init() {
+  restoreStylePrefs();  // apply persisted style prefs before first render
+  if (window.__GRAPH_DATA__) {
+    loadGraph(window.__GRAPH_DATA__);
+    hideSplash();
+    return;
+  }
+  setStatus('Loading…', 'busy');
+  fetch('graph.json')
+    .then(r => {
+      // 区分「HTTP 错误」与「解析错误」，不再统一吞成 "No graph loaded"
+      if (!r.ok) { const e = new Error('HTTP ' + r.status + ' ' + (r.statusText || '')); e.kind = 'http'; throw e; }
+      return r.json().catch(je => { const e = new Error(je.message); e.kind = 'parse'; throw e; });
+    })
+    .then(data => { loadGraph(data); hideSplash(); })
+    .catch(err => {
+      hideSplash();
+      setStatus('Load failed', 'error');
+      showEmptyMessage(
+        err && err.kind === 'http'  ? 'Failed to load graph.json (' + err.message + ') — serve this page over HTTP' :
+        err && err.kind === 'parse' ? 'graph.json is not valid JSON' :
+                                      'No graph loaded — drag-drop a JSON file');
+    });
+})();
+
+};  // ← 结束 window.__startApp
+
+// 依赖若已先就绪（加载器可能早于本脚本完成），立即启动
+if (window.__libsReady) window.__startApp();
+</script>
+</body>
+</html>
